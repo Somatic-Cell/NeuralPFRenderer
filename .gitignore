@@ -1,0 +1,5 @@
+/build
+/model/
+result.log
+imgui.ini
+*.jpg

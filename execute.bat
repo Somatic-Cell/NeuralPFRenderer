@@ -1,0 +1,1 @@
+build\bin\Release\SimpleRenderer.exe 2>err.log
