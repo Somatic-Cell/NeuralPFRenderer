@@ -2,6 +2,7 @@
 #define LAUNCH_PARAMS_H_
 
 #include "optix8.hpp"
+#include "../utils/my_math.hpp"
 #include <cuda_runtime.h>
 
 // ray type
@@ -54,7 +55,6 @@ struct TextureSlot {
 
 
 struct TriangleMeshSBTData {
-    float3* color;
     float3* vertex;
     float3* normal;
     float4* tangent;
@@ -63,7 +63,13 @@ struct TriangleMeshSBTData {
     float2* emissiveTexcoord;
     uint3*  index;
 
+    bool hasTangent;
+    bool hasNormal;
+
+    unsigned int instanceID;
+
     unsigned int    materialType;
+    float3  color;
     float   roughness;
     float   metallic;
     float3  emissive;
@@ -96,10 +102,13 @@ struct LaunchParams {
         float4* normalBuffer;
         float4* albedoBuffer;
 
+        mymath::matrix3x4* objectMatrixBuffer;
+        mymath::matrix3x3* normalMatrixBuffer;
+
         int2    size            {make_int2(1920, 1080)};
         int     accumID         {0};
         int     numPixelSamples {1};
-        int     maxBounce       {2};
+        int     maxBounce       {8};
         int     frameID         {0};
     } frame;
 
@@ -127,6 +136,15 @@ struct LaunchParams {
         int numLights                   {0};
         float lightIntensityFactor      {10.0f};
     } light;
+
+    struct {
+        bool    hasEnvMap       {false};
+        float*  coarseMarginal;
+        float*  coarseConditional;
+        float*  patchWeight;
+        float   totalWeight;
+        int2    patchSize;
+    } envMapInfo;
     
     struct {
         // RIS

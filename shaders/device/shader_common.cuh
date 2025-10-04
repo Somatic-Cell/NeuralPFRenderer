@@ -2,7 +2,8 @@
 #define SHADER_COMMON_CUH_
 
 #include <cuda_runtime.h>
-#include "../utils/helper_math.h"
+#include "../../utils/helper_math.h"
+#include "../../utils/my_math.hpp"
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -57,8 +58,8 @@ inline __device__ __host__ void rotate(const float3 _u, const float r, float3& v
 inline __device__ __host__ float3 random_unit_hemisphere(float rnd1, float rnd2)
 {
     float a = rnd1 * 2.f * M_PI;
-    float z = 2.f * rnd2 - 1.f;
-    float r = sqrtf(1.f - z * z);
+    float z = rnd2;
+    float r = fmaxf(0.0f, sqrtf(1.f - z * z));
     return make_float3(r * cosf(a), z, r * sinf(a));
 }
 
@@ -89,6 +90,15 @@ inline __device__ __host__ float2 random_unit_disk(float rnd1, float rnd2)
     return p;
 }
 
+inline __device__ __host__ float3 randomCosineHemisphere(float rnd1, float rnd2)
+{
+    const float r = sqrtf(rnd1);
+    const float phi = rnd2 * 2.f * M_PI;
+    const float x = r * cosf(phi);
+    const float z = r * sinf(phi);
+    const float y = fmaxf(0.0f, sqrtf(1.f - x * x - z * z));
+    return make_float3(x, y, z);
+}
 
 // 基底変換
 inline __device__ __host__ float3 localToWorld(const float3 v, const float3 localX, const float3 localY, const float3 localZ) {
@@ -100,25 +110,34 @@ inline __device__ __host__ float3 worldToLocal(const float3 v, const float3 loca
 }
 
 // 球面座標
-inline __device__ __host__ void orthogonalToSphericalCoord(const float3 dir, float* u, float* v) {
+inline __device__ __host__ void orthogonalToUVCoord(const float3 dir, float* u, float* v) {
     // const float3 dir = normalize(_dir);
-    *u = (M_PI - atan2f(dir.x, dir.z)) / (2.f * M_PI);
-    *v = acosf(dir.y) / M_PI;
+    float phi = atan2f(dir.z, dir.x);
+    if(phi < 0.0f) phi += 2.0f * M_PI;
+    float theta = acosf(fminf(fmaxf(dir.y, -1.0f), 1.0f));
+    *u = phi / (2.f * M_PI);
+    *v = theta / M_PI;
+}
+
+
+inline __device__ __host__ float3 sphericalToOrthogonalCoord(const float theta, const float phi) {
+    float sinT = sinf(theta);
+    return make_float3(cosf(phi) * sinT, cosf(theta), sinf(phi) * sinT);
 }
 
 
 // wi を返す
-inline __device__ float3 cosineSampling(const float u, const float v)
-{
-    const float theta = 0.5f * acosf(1.0f - 2.0f * u);
-    const float phi = 2.0f * M_PI * v;
+// inline __device__ float3 cosineSampling(const float u, const float v)
+// {
+//     const float theta = 0.5f * acosf(1.0f - 2.0f * u);
+//     const float phi = 2.0f * M_PI * v;
 
-    const float sinTheta    = sinf(theta);
-    const float cosTheta    = cosf(theta);
-    const float sinPhi      = sinf(phi);
-    const float cosPhi      = cosf(phi);
-    return make_float3(sinTheta * cosPhi, cosTheta, sinTheta * sinPhi);
-}
+//     const float sinTheta    = sinf(theta);
+//     const float cosTheta    = cosf(theta);
+//     const float sinPhi      = sinf(phi);
+//     const float cosPhi      = cosf(phi);
+//     return make_float3(sinTheta * cosPhi, cosTheta, sinTheta * sinPhi);
+// }
 
 // wm を返す
 inline __device__ float3 visibleNormalSampling( const float alpha, 
@@ -154,7 +173,7 @@ inline __device__ float3 evalLambertBRDF(const float3 baseColor, const float3 wo
 }
 
 inline __device__ float getLambertPdf(const float3 wo, const float3 wi){
-    return fmaxf(wi.y, 1e-4f) / M_PI ;
+    return wi.y / M_PI ;
 }
 
 inline __device__ float ggx_D(const float alpha, const float3 wm)
@@ -213,11 +232,58 @@ inline __device__ float getGGXPdf(const float alpha, const float3 wo, const floa
 }
 
 __forceinline__ __device__ float balanceHeuristicWeight(const int num_a, const float pdf_a, const int num_b, const float pdf_b){
-    float np_a = (float)num_a * pdf_a;
-    float np_b = (float)num_b * pdf_b;
-    return np_a / (np_a + np_b);
+    float pa = (pdf_a > 0.f) ? pdf_a : 0.0f;
+    float pb = (pdf_b > 0.f) ? pdf_b : 0.0f;
+
+    const float np_a = (float)num_a * pa;
+    const float np_b = (float)num_b * pb;
+    const float s = np_a + np_b;
+    return (s > 0.f) ? np_a / s : 0.0f;
 }
 
+static __forceinline__ __device__ int lowerBoundCDF(const float* __restrict__ cdf, int n, float u)
+{
+    int low = 0, high = n - 1;
+    while (low < high) {
+        int mid = (low + high) >> 1;
+        if (u <= cdf[mid])  high = mid;
+        else                low = mid + 1;
+    }
+    return low;
+}
+
+static __forceinline__ __device__ void thetaPhiFromPatch(
+    const int row, 
+    const int col,
+    const int wp,
+    const int hp,
+    float* theta0,
+    float* theta1,
+    float* phi0,
+    float* phi1
+){
+    float u0 = float(col)       / float(wp);
+    float u1 = float(col + 1)   / float(wp);
+    float v0 = float(row)       / float(hp);
+    float v1 = float(row + 1)   / float(hp);
+    
+    *phi0 = 2.0f * M_PI * u0;
+    *phi1 = 2.0f * M_PI * u1;
+    *theta0 = M_PI * v0;
+    *theta1 = M_PI * v1;
+}
+
+static __forceinline__ __device__ float2 envUVFromSpherical(
+    const float theta,
+    const float phi
+)
+{
+    float u = phi / (2.0f *  M_PI);
+    float v = theta / M_PI;
+    u = u - floorf(u);
+    v = fminf(fmaxf(v, 0.0f), 1.0f);
+    return make_float2(u, v);
+}
 
 
 #endif // SHADER_COMMON_CUH_

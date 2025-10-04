@@ -51,23 +51,35 @@ struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) HitgroupRecord
 };
 
 
-Renderer::Renderer(const Model* model) : m_model(model)
+Renderer::Renderer(std::vector<const Model*> models) : m_models(models)
 {
     m_optixModuleFileNames.resize(static_cast<int>(OptixModuleIdentifier::NUM_OPTIX_MODULE_IDENTIFIERS));
 #if defined(USE_OPTIX_IR)
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_HIT)]             = std::string("hit.optixir");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LENS)]            = std::string("lens.optixir");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_DIFFUSE)]    = std::string("diffuse_brdf.optixir");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_PRINCIPLED)] = std::string("disney_principled_brdf.optixir");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_GLASS)]      = std::string("glass_bsdf.optixir");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)]     = std::string("light_sample.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_RAYGEN)]             = std::string("raygen.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_RADIANCE)]        = std::string("ah_radiance.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_SHADOW)]          = std::string("ah_shadow.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_RADIANCE)]        = std::string("ch_radiance.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_SHADOW)]          = std::string("ch_shadow.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_MISS_RADIANCE)]      = std::string("miss_radiance.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_MISS_SHADOW)]        = std::string("miss_shadow.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_DIFFUSE)]       = std::string("diffuse_brdf.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_PRINCIPLED)]    = std::string("disney_principled_brdf.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_GLASS)]         = std::string("glass_bsdf.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)]        = std::string("light_sample.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LENS)]               = std::string("lens.optixir");
 #else
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_HIT)]             = std::string("hit.ptx");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LENS)]            = std::string("lens.ptx");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_DIFFUSE)]    = std::string("diffuse_brdf.ptx");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_PRINCIPLED)] = std::string("disney_principled_brdf.ptx");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_GLASS)]      = std::string("glass_bsdf.ptx");
-    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)]     = std::string("light_sample.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_RAYGEN)]             = std::string("raygen.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_RADIANCE)]        = std::string("ah_radiance.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_SHADOW)]          = std::string("ah_shadow.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_RADIANCE)]        = std::string("ch_radiance.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_SHADOW)]          = std::string("ch_shadow.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_MISS_RADIANCE)]      = std::string("miss_radiance.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_MISS_SHADOW)]        = std::string("miss_shadow.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_DIFFUSE)]       = std::string("diffuse_brdf.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_PRINCIPLED)]    = std::string("disney_principled_brdf.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_GLASS)]         = std::string("glass_bsdf.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)]        = std::string("light_sample.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LENS)]               = std::string("lens.ptx");
 #endif
     
     m_cudaModuleFileNames.resize(static_cast<int>(PostProcessCudaModuleIdentifier::NUM_CUDA_MODULE_IDENTIFIERS));
@@ -77,102 +89,109 @@ Renderer::Renderer(const Model* model) : m_model(model)
 
     initOptix();
     
-    std::cout << "# Simple Renderer: creating OptiX context..." << std::endl;
+    std::cout << "# Photonic RT: creating OptiX context..." << std::endl;
     createContext();
 
-    std::cout << "# Simple Renderer: setting up OptiX module..." << std::endl;
+    std::cout << "# Photonic RT: setting up OptiX module..." << std::endl;
     createOptiXModule();
 
-    std::cout << "# Simple Renderer: creating raygen programs ..." << std::endl;
+    std::cout << "# Photonic RT: creating raygen programs ..." << std::endl;
     createRaygenPrograms();
-    std::cout << "# Simple Renderer: creating miss programs ..." << std::endl;
+    std::cout << "# Photonic RT: creating miss programs ..." << std::endl;
     createMissPrograms();
-    std::cout << "# Simple Renderer: creating callable programs ..." << std::endl;
+    std::cout << "# Photonic RT: creating callable programs ..." << std::endl;
     createCallablePrograms();
-    std::cout << "# Simple Renderer: creating hitgroup programs ..." << std::endl;
+    std::cout << "# Photonic RT: creating hitgroup programs ..." << std::endl;
     createHitgroupPrograms();
 
     buildAccel();
     m_launchParams.traversable = m_iasHandle;
 
-    std::cout << "# Simple Renderer: setting up OptiX pipeline ..." << std::endl;
+    std::cout << "# Photonic RT: setting up OptiX pipeline ..." << std::endl;
     createPipeline();
     
     createTextures();
 
-    std::cout << "# Simple Renderer: building shader binding table..." << std::endl;
+    std::cout << "# Photonic RT: building shader binding table..." << std::endl;
     buildSBT();
 
     m_launchParamsBuffer.alloc(sizeof(m_launchParams)); // alloc だけ？
-    std::cout << "# Simple Renderer: context, module, pipeline, etc, all set up ..." << std::endl;
-    std::cout << "# Simple Renderer: Optix 8 fully set up..." << std::endl;
+    std::cout << "# Photonic RT: context, module, pipeline, etc, all set up ..." << std::endl;
+    std::cout << "# Photonic RT: Optix 8 fully set up..." << std::endl;
 
     
-    std::cout << "# Simple Renderer: setting up CUDA module..." << std::endl;
+    std::cout << "# Photonic RT: setting up CUDA module..." << std::endl;
     createCUDAModule();
 
-    std::cout << "# Simple Renderer: create light table..." << std::endl;
+    std::cout << "# Photonic RT: create light table..." << std::endl;
     createLightTable();
-    std::cout << "# Simple Renderer: CUDA kernel fully set up..." << std::endl;
+    std::cout << "# Photonic RT: CUDA kernel fully set up..." << std::endl;
 }
 
 
 void Renderer::createTextures()
 {
-    int numTextures = (int)m_model->textures.size();
+    int numTextures = 0;
+    for(auto* mdl : m_models) numTextures +=(int)mdl->textures.size();
   
     m_textureArrays.resize(numTextures);
     m_textureObjects.resize(numTextures);
 
-    for(int textureID = 0; textureID < numTextures; textureID++){
-        auto texture = m_model->textures[textureID];
+    size_t flat = 0;
+    for (auto mdl : m_models){
+        for(int textureID = 0; textureID < (int)mdl->textures.size(); ++textureID, ++flat){
+            auto texture = mdl->textures[textureID];
 
-        cudaResourceDesc resDesc = {};
+            cudaResourceDesc resDesc = {};
 
-        cudaChannelFormatDesc channelDesc;
-        int32_t width = texture->resolution.x;
-        int32_t height = texture->resolution.y;
-        int32_t numComponents = 4; //rgba
-        int32_t pitch = width * numComponents * sizeof(uint8_t);
-        channelDesc = cudaCreateChannelDesc<uchar4>();
+            cudaChannelFormatDesc channelDesc;
+            int32_t width = texture->resolution.x;
+            int32_t height = texture->resolution.y;
+            int32_t numComponents = 4; //rgba
+            int32_t pitch = width * numComponents * sizeof(uint8_t);
+            channelDesc = cudaCreateChannelDesc<uchar4>();
 
-        cudaArray_t &pixelArray = m_textureArrays[textureID];
-        CUDA_CHECK(cudaMallocArray(&pixelArray, &channelDesc, width, height));
-        CUDA_CHECK(cudaMemcpy2DToArray(pixelArray, 0, 0, texture->pixel, pitch, pitch, height, cudaMemcpyHostToDevice));
-        
-        resDesc.resType = cudaResourceTypeArray;
-        resDesc.res.array.array = pixelArray;
+            cudaArray_t &pixelArray = m_textureArrays[flat];
+            CUDA_CHECK(cudaMallocArray(&pixelArray, &channelDesc, width, height));
+            CUDA_CHECK(cudaMemcpy2DToArray(pixelArray, 0, 0, texture->pixel, pitch, pitch, height, cudaMemcpyHostToDevice));
+            
+            resDesc.resType = cudaResourceTypeArray;
+            resDesc.res.array.array = pixelArray;
 
-        // テクスチャのふるまいを決定
-        cudaTextureDesc texDesc = {};                               
-        texDesc.addressMode[0]      = cudaAddressModeWrap;          // テクスチャが範囲外になったときの対処法 (タイリング)
-        texDesc.addressMode[1]      = cudaAddressModeWrap;          // テクスチャが範囲外になったときの対処法 (タイリング)
-        texDesc.filterMode          = cudaFilterModeLinear;         // テクセルの補間方法
-        texDesc.readMode            = cudaReadModeNormalizedFloat;  // GPUg　側で読み込むときのフォーマット (0-1)
-        texDesc.normalizedCoords    = 1;                            // テクスチャ座標を [0,1] 範囲で指定
-        texDesc.maxAnisotropy       = 1;                            // 異方性フィルタリングの強度 (1:無効)
-        texDesc.maxMipmapLevelClamp = 99;                           // ミップレベルの最大
-        texDesc.minMipmapLevelClamp = 0;                            // ミップレベルの最小
-        texDesc.mipmapFilterMode    = cudaFilterModeLinear;         // ミップマップ間の補間
-        texDesc.borderColor[0]      = 1.0f;                         // 範囲外で指定される色
-        if(texture->isDiffuseTexture){
-            texDesc.sRGB            = 1;                            // 1: 読み込む画像は sRGB 画像と考え，ガンマ補正を適用して読み込み
-        } else {
-            texDesc.sRGB            = 0;                            // そのまま読み込み
+            // テクスチャのふるまいを決定
+            cudaTextureDesc texDesc = {};                               
+            texDesc.addressMode[0]      = cudaAddressModeWrap;          // テクスチャが範囲外になったときの対処法 (タイリング)
+            texDesc.addressMode[1]      = cudaAddressModeWrap;          // テクスチャが範囲外になったときの対処法 (タイリング)
+            texDesc.filterMode          = cudaFilterModeLinear;         // テクセルの補間方法
+            texDesc.readMode            = cudaReadModeNormalizedFloat;  // GPU 側で読み込むときのフォーマット (0-1)
+            texDesc.normalizedCoords    = 1;                            // テクスチャ座標を [0,1] 範囲で指定
+            texDesc.maxAnisotropy       = 1;                            // 異方性フィルタリングの強度 (1:無効)
+            texDesc.maxMipmapLevelClamp = 99;                           // ミップレベルの最大
+            texDesc.minMipmapLevelClamp = 0;                            // ミップレベルの最小
+            texDesc.mipmapFilterMode    = cudaFilterModeLinear;         // ミップマップ間の補間
+            texDesc.borderColor[0]      = 1.0f;                         // 範囲外で指定される色
+            if(texture->isDiffuseTexture){
+                texDesc.sRGB            = 1;                            // 1: 読み込む画像は sRGB 画像と考え，ガンマ補正を適用して読み込み
+            } else {
+                texDesc.sRGB            = 0;                            // そのまま読み込み
+            }
+
+            cudaTextureObject_t cudaTex = 0;
+            CUDA_CHECK(cudaCreateTextureObject(&cudaTex, &resDesc, &texDesc, nullptr));
+            m_textureObjects[flat] = cudaTex;
         }
-
-        cudaTextureObject_t cudaTex = 0;
-        CUDA_CHECK(cudaCreateTextureObject(&cudaTex, &resDesc, &texDesc, nullptr));
-        m_textureObjects[textureID] = cudaTex;
     }
 }
 
 bool Renderer::buildAccel()
 {
     PING;
-    PRINT(m_model->meshes.size());
-    
-    const int numMeshes = (int)m_model->meshes.size();
+    std::cout << "Building GAS..." << std::endl;
+    int numMeshes = 0;
+    for(auto* mdl : m_models) {
+        numMeshes +=(int)mdl->meshes.size();
+        PRINT(mdl->meshes.size());
+    }
 
     m_vertexBuffer.resize(numMeshes);
     m_indexBuffer.resize(numMeshes);
@@ -189,168 +208,186 @@ bool Renderer::buildAccel()
     // ===========================
     // GAS (BLAS) を構築　（メッシュごとに 1 つ）
     // ===========================
-    for(int meshID = 0; meshID < numMeshes; meshID++){
+    std::vector<mymath::matrix3x4> objectMatrix(numMeshes);
+    std::vector<mymath::matrix3x3> normalMatrix(numMeshes);
+    size_t flat = 0;
+    for(auto* mdl : m_models) {
+        mymath::matrix3x4 mat = mdl->modelMatrix;
+        for(int meshID = 0; meshID < (int)mdl->meshes.size(); ++meshID, ++flat){
+
+            objectMatrix[flat] = mat;
+            normalMatrix[flat] = linear3x3(mat);
         
-        // 三角形の入力
-        OptixBuildInput     triangleInput;
-        CUdeviceptr         d_vertices;
-        CUdeviceptr         d_indices;
-        uint32_t            triangleInputFlags;
+            // 三角形の入力
+            OptixBuildInput     triangleInput;
+            CUdeviceptr         d_vertices;
+            CUdeviceptr         d_indices;
+            uint32_t            triangleInputFlags;
 
-        TriangleMesh &mesh = *m_model->meshes[meshID];
-        m_vertexBuffer[meshID].allocAndUpload(mesh.vertex);
-        m_indexBuffer[meshID].allocAndUpload(mesh.index);
-        if(!mesh.normal.empty()){
-            m_normalBuffer[meshID].allocAndUpload(mesh.normal);
+            TriangleMesh &mesh = *mdl->meshes[meshID];
+            m_vertexBuffer[flat].allocAndUpload(mesh.vertex);
+            m_indexBuffer[flat].allocAndUpload(mesh.index);
+            if(!mesh.normal.empty()){
+                m_normalBuffer[flat].allocAndUpload(mesh.normal);
+            }
+            if(!mesh.diffuseTexcoord.empty()){
+                m_diffuseTexcoordBuffer[flat].allocAndUpload(mesh.diffuseTexcoord);
+            }
+            if(!mesh.normalTexcoord.empty()){
+                m_normalTexcoordBuffer[flat].allocAndUpload(mesh.normalTexcoord);
+            }
+            if(!mesh.emissiveTexcoord.empty()){
+                m_emissiveTexcoordBuffer[flat].allocAndUpload(mesh.emissiveTexcoord);
+            }
+            if(!mesh.tangent.empty()){
+                m_tangentBuffer[flat].allocAndUpload(mesh.tangent);
+            }
+
+
+            triangleInput = {}; // ここに情報を入れていく
+            triangleInput.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+
+            d_vertices = m_vertexBuffer[flat].getDevicePointer();
+            d_indices = m_indexBuffer[flat].getDevicePointer();
+
+            // 頂点情報
+            triangleInput.triangleArray.vertexFormat        = OPTIX_VERTEX_FORMAT_FLOAT3;
+            triangleInput.triangleArray.vertexStrideInBytes = sizeof(float3);
+            triangleInput.triangleArray.numVertices         = (int)mesh.vertex.size();
+            triangleInput.triangleArray.vertexBuffers       = &d_vertices;
+
+            // 頂点のインデックス情報
+            triangleInput.triangleArray.indexFormat         = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
+            triangleInput.triangleArray.indexStrideInBytes  = sizeof(uint3);
+            triangleInput.triangleArray.numIndexTriplets    = (int)mesh.index.size();
+            triangleInput.triangleArray.indexBuffer         = d_indices;
+
+            triangleInputFlags = OPTIX_GEOMETRY_FLAG_NONE;  // 特別な設定を行わない
+            // MEMO: 
+            // OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT : any_hit シェーダを無効化
+            // OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL : 1回だけ any-hit をよぶ
+            // OPTIX_GEOMETRY_FLAG_DISABLE_TRIANGLE_FACE_CULLING :  バックフェースカリングを無効化　
+            //                                                      （薄いマテリアルをレンダリングしたいときにたてる）
+
+            // 単一の SBT レコードを使用
+            triangleInput.triangleArray.flags                       = &triangleInputFlags;
+            triangleInput.triangleArray.numSbtRecords               = 1;        // 単一の SBT レコード
+            // 単一の場合，未使用なので 0 
+            triangleInput.triangleArray.sbtIndexOffsetBuffer        = 0;        
+            triangleInput.triangleArray.sbtIndexOffsetSizeInBytes   = 0;
+            triangleInput.triangleArray.sbtIndexOffsetStrideInBytes = 0;
+
+
+            // GAS のセットアップ
+            OptixAccelBuildOptions  accelOptions    = {};
+            accelOptions.buildFlags                 = OPTIX_BUILD_FLAG_NONE | OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+            if(getNumDevices() == 1){
+                // 複数 GPU を使うと性能が悪化する恐れがあるため，単一 GPU の場合のみオプションを追加
+                accelOptions.buildFlags             |= OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
+            }
+            accelOptions.motionOptions.numKeys      = 1;    // モーションブラーなし． numKeys > 1 でブラー補間
+            accelOptions.operation                  = OPTIX_BUILD_OPERATION_BUILD; // 新規構築． ..._UPDATE を使うと更新
+
+
+            // AS に必要なバッファサイズの見積もり
+            OptixAccelBufferSizes gasBufferSizes;
+            OPTIX_CHECK(
+                optixAccelComputeMemoryUsage(
+                    m_optixContext,
+                    &accelOptions,
+                    &triangleInput,
+                    1,              // メッシュの個数．今回は1個ずつ作成しているので1
+                    &gasBufferSizes
+                )
+            );
+
+            // Compaction の準備
+            // AS を最悪のケースを想定して作るので，作成後に不要となった部分を圧縮することで VRAM を節約可能
+            
+            CUDABuffer compactedSizeBuffer;
+            compactedSizeBuffer.alloc(sizeof(uint64_t));
+
+            OptixAccelEmitDesc emitDesc;                        // AS 構築時の圧縮後サイズ，AABB の範囲，インスタンスの変換行列... を出力してくれる補助出力の構造体
+            emitDesc.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE; // 圧縮後のサイズを返すように指定
+            emitDesc.result = compactedSizeBuffer.getDevicePointer();
+
+            // GAS の構築
+            CUDABuffer tempBuffer;
+            tempBuffer.alloc(gasBufferSizes.tempSizeInBytes);
+
+            CUDABuffer outputBuffer;
+            outputBuffer.alloc(gasBufferSizes.outputSizeInBytes);
+
+            OPTIX_CHECK(
+                optixAccelBuild(
+                    m_optixContext,
+                    0, // stream
+                    &accelOptions,
+                    &triangleInput,
+                    1,              // メッシュの個数．今回は1個ずつ作成しているので1
+                    
+                    // temp
+                    tempBuffer.getDevicePointer(),
+                    tempBuffer.getSizeInBytes(),
+
+                    // output
+                    outputBuffer.getDevicePointer(),
+                    outputBuffer.getSizeInBytes(),
+
+                    &m_gasHandle[flat],
+
+                    &emitDesc, 1
+                )
+            );
+
+            CUDA_SYNC_CHECK();
+            // Compaction の実行
+            uint64_t compactedSize;
+            compactedSizeBuffer.download(&compactedSize, 1);
+            m_GASBuffer[flat].alloc(compactedSize);
+            OPTIX_CHECK(
+                optixAccelCompact(
+                    m_optixContext,
+                    0,
+                    m_gasHandle[flat],
+                    m_GASBuffer[flat].getDevicePointer(),
+                    m_GASBuffer[flat].getSizeInBytes(),
+                    &m_gasHandle[flat]
+                )
+            );
+
+            CUDA_SYNC_CHECK();
+
+            // クリーンアップ
+            outputBuffer.free();
+            tempBuffer.free();
+            compactedSizeBuffer.free();
         }
-        if(!mesh.diffuseTexcoord.empty()){
-            m_diffuseTexcoordBuffer[meshID].allocAndUpload(mesh.diffuseTexcoord);
-        }
-        if(!mesh.normalTexcoord.empty()){
-            m_normalTexcoordBuffer[meshID].allocAndUpload(mesh.normalTexcoord);
-        }
-        if(!mesh.emissiveTexcoord.empty()){
-            m_emissiveTexcoordBuffer[meshID].allocAndUpload(mesh.emissiveTexcoord);
-        }
-        if(!mesh.tangent.empty()){
-            m_tangentBuffer[meshID].allocAndUpload(mesh.tangent);
-        }
-
-
-        triangleInput = {}; // ここに情報を入れていく
-        triangleInput.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
-
-        d_vertices = m_vertexBuffer[meshID].getDevicePointer();
-        d_indices = m_indexBuffer[meshID].getDevicePointer();
-
-        // 頂点情報
-        triangleInput.triangleArray.vertexFormat        = OPTIX_VERTEX_FORMAT_FLOAT3;
-        triangleInput.triangleArray.vertexStrideInBytes = sizeof(float3);
-        triangleInput.triangleArray.numVertices         = (int)mesh.vertex.size();
-        triangleInput.triangleArray.vertexBuffers       = &d_vertices;
-
-        // 頂点のインデックス情報
-        triangleInput.triangleArray.indexFormat         = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
-        triangleInput.triangleArray.indexStrideInBytes  = sizeof(uint3);
-        triangleInput.triangleArray.numIndexTriplets    = (int)mesh.index.size();
-        triangleInput.triangleArray.indexBuffer         = d_indices;
-
-        triangleInputFlags = OPTIX_GEOMETRY_FLAG_NONE;  // 特別な設定を行わない
-        // MEMO: 
-        // OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT : any_hit シェーダを無効化
-        // OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL : 1回だけ any-hit をよぶ
-        // OPTIX_GEOMETRY_FLAG_DISABLE_TRIANGLE_FACE_CULLING :  バックフェースカリングを無効化　
-        //                                                      （薄いマテリアルをレンダリングしたいときにたてる）
-
-        // 単一の SBT レコードを使用
-        triangleInput.triangleArray.flags                       = &triangleInputFlags;
-        triangleInput.triangleArray.numSbtRecords               = 1;        // 単一の SBT レコード
-        // 単一の場合，未使用なので 0 
-        triangleInput.triangleArray.sbtIndexOffsetBuffer        = 0;        
-        triangleInput.triangleArray.sbtIndexOffsetSizeInBytes   = 0;
-        triangleInput.triangleArray.sbtIndexOffsetStrideInBytes = 0;
-
-
-        // GAS のセットアップ
-        OptixAccelBuildOptions  accelOptions    = {};
-        accelOptions.buildFlags                 = OPTIX_BUILD_FLAG_NONE | OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-        if(getNumDevices() == 1){
-            // 複数 GPU を使うと性能が悪化する恐れがあるため，単一 GPU の場合のみオプションを追加
-            accelOptions.buildFlags             |= OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
-        }
-        accelOptions.motionOptions.numKeys      = 1;    // モーションブラーなし． numKeys > 1 でブラー補間
-        accelOptions.operation                  = OPTIX_BUILD_OPERATION_BUILD; // 新規構築． ..._UPDATE を使うと更新
-
-
-        // AS に必要なバッファサイズの見積もり
-        OptixAccelBufferSizes gasBufferSizes;
-        OPTIX_CHECK(
-            optixAccelComputeMemoryUsage(
-                m_optixContext,
-                &accelOptions,
-                &triangleInput,
-                1,              // メッシュの個数．今回は1個ずつ作成しているので1
-                &gasBufferSizes
-            )
-        );
-
-        // Compaction の準備
-        // AS を最悪のケースを想定して作るので，作成後に不要となった部分を圧縮することで VRAM を節約可能
-        
-        CUDABuffer compactedSizeBuffer;
-        compactedSizeBuffer.alloc(sizeof(uint64_t));
-
-        OptixAccelEmitDesc emitDesc;                        // AS 構築時の圧縮後サイズ，AABB の範囲，インスタンスの変換行列... を出力してくれる補助出力の構造体
-        emitDesc.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE; // 圧縮後のサイズを返すように指定
-        emitDesc.result = compactedSizeBuffer.getDevicePointer();
-
-        // GAS の構築
-        CUDABuffer tempBuffer;
-        tempBuffer.alloc(gasBufferSizes.tempSizeInBytes);
-
-        CUDABuffer outputBuffer;
-        outputBuffer.alloc(gasBufferSizes.outputSizeInBytes);
-
-        OPTIX_CHECK(
-            optixAccelBuild(
-                m_optixContext,
-                0, // stream
-                &accelOptions,
-                &triangleInput,
-                1,              // メッシュの個数．今回は1個ずつ作成しているので1
-                
-                // temp
-                tempBuffer.getDevicePointer(),
-                tempBuffer.getSizeInBytes(),
-
-                // output
-                outputBuffer.getDevicePointer(),
-                outputBuffer.getSizeInBytes(),
-
-                &m_gasHandle[meshID],
-
-                &emitDesc, 1
-            )
-        );
-
-        CUDA_SYNC_CHECK();
-        // Compaction の実行
-        uint64_t compactedSize;
-        compactedSizeBuffer.download(&compactedSize, 1);
-        m_GASBuffer[meshID].alloc(compactedSize);
-        OPTIX_CHECK(
-            optixAccelCompact(
-                m_optixContext,
-                0,
-                m_gasHandle[meshID],
-                m_GASBuffer[meshID].getDevicePointer(),
-                m_GASBuffer[meshID].getSizeInBytes(),
-                &m_gasHandle[meshID]
-            )
-        );
-
-        CUDA_SYNC_CHECK();
-
-        // クリーンアップ
-        outputBuffer.free();
-        tempBuffer.free();
-        compactedSizeBuffer.free();
     }
+
+    m_objectMatrix.allocAndUpload(objectMatrix);
+    m_normalMatrix.allocAndUpload(normalMatrix);
+    m_launchParams.frame.objectMatrixBuffer = (mymath::matrix3x4*)m_objectMatrix.getDevicePointer();
+    m_launchParams.frame.normalMatrixBuffer = (mymath::matrix3x3*)m_normalMatrix.getDevicePointer();
+    
+
     
     // ==========================
     // IAS (TLAS) の構築
     // ==========================
 
+    std::cout << "Building IAS..." << std::endl;
     std::vector<OptixInstance> instances(numMeshes);
 
     for(unsigned int meshID = 0; meshID < numMeshes; meshID++){
         OptixInstance & inst = instances[meshID];
         memset(&inst, 0, sizeof(OptixInstance));
 
+        mymath::matrix3x4 mat = objectMatrix[meshID];
         float transform[12] = {
-            1, 0, 0, 0,
-            0, 1, 0, 0, 
-            0, 0, 1, 0
+            mat.row0.x, mat.row0.y, mat.row0.z, mat.row0.w, 
+            mat.row1.x, mat.row1.y, mat.row1.z, mat.row1.w, 
+            mat.row2.x, mat.row2.y, mat.row2.z, mat.row2.w, 
         };
 
         memcpy(inst.transform, transform, sizeof(float) * 12);
@@ -375,6 +412,7 @@ bool Renderer::buildAccel()
 
 
     // IAS のセットアップ
+    
     OptixAccelBuildOptions  accelOptions    = {};
     accelOptions.buildFlags                 = OPTIX_BUILD_FLAG_NONE | OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
     if(getNumDevices() == 1){
@@ -598,7 +636,7 @@ void Renderer::createRaygenPrograms()
     OptixProgramGroupOptions    pgOptions   = {};
     OptixProgramGroupDesc       pgDesc      = {};
     pgDesc.kind                             = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
-    pgDesc.raygen.module                    = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_HIT)];
+    pgDesc.raygen.module                    = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_RAYGEN)];
     pgDesc.raygen.entryFunctionName         = "__raygen__renderFrame";
 
     // m_raygenPrograms に 登録
@@ -622,7 +660,7 @@ void Renderer::createMissPrograms()
     OptixProgramGroupOptions    pgOptions   = {};
     OptixProgramGroupDesc       pgDesc      = {};
     pgDesc.kind                             = OPTIX_PROGRAM_GROUP_KIND_MISS;
-    pgDesc.miss.module                      = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_HIT)];
+    pgDesc.miss.module                      = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_MISS_RADIANCE)];
 
     char log[2048];
     size_t sizeOfLog = sizeof(log);
@@ -641,6 +679,7 @@ void Renderer::createMissPrograms()
     if (sizeOfLog > 1) PRINT(log);
 
     // m_missPrograms に shadow ray を登録
+    pgDesc.miss.module                      = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_MISS_SHADOW)];
     pgDesc.miss.entryFunctionName = "__miss__shadow";
 
     OPTIX_CHECK(optixProgramGroupCreate(m_optixContext,
@@ -662,8 +701,8 @@ void Renderer::createHitgroupPrograms()
     OptixProgramGroupOptions    pgOptions   = {};
     OptixProgramGroupDesc       pgDesc      = {};
     pgDesc.kind                             = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-    pgDesc.hitgroup.moduleCH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_HIT)];
-    pgDesc.hitgroup.moduleAH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_HIT)];
+    pgDesc.hitgroup.moduleCH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_RADIANCE)];
+    pgDesc.hitgroup.moduleAH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_RADIANCE)];
 
     char log[2048];
     size_t sizeOfLog = sizeof(log);
@@ -683,6 +722,9 @@ void Renderer::createHitgroupPrograms()
     if (sizeOfLog > 1) PRINT(log);
 
     // shadow ray の登録
+    pgDesc.hitgroup.moduleCH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_SHADOW)];
+    pgDesc.hitgroup.moduleAH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_SHADOW)];
+    
     pgDesc.hitgroup.entryFunctionNameCH = "__closesthit__shadow";
     pgDesc.hitgroup.entryFunctionNameAH = "__anyhit__shadow";
 
@@ -771,7 +813,7 @@ void Renderer::createCallablePrograms()
     pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)];
-    pgd->callables.entryFunctionNameDC    = "__direct_callable__light_env_sphere_constant";
+    pgd->callables.entryFunctionNameDC    = "__direct_callable__light_env_sphere_is";
 
     // メッシュ
     pgd = &pgDesc[offset + LIGHT_TYPE_TRIANGLE];
@@ -888,62 +930,78 @@ void Renderer::buildSBT()
     m_sbt.callablesRecordCount           = (int)callableRecords.size();
 
     // Hitgroup records の登録
-    int numObjects = (int)m_model->meshes.size();
+    // size_t numObjects = 0;
+    // for(auto* mdl: m_models) numObjects += mdl->meshes.size();
     std::vector<HitgroupRecord> hitgroupRecords;
-    for(int meshID = 0; meshID < numObjects; meshID++)
-    {
-        auto mesh = m_model->meshes[meshID];
-        for(int rayID = 0; rayID < RAY_TYPE_COUNT; rayID++)
-        {
-            HitgroupRecord rec;
-            OPTIX_CHECK(optixSbtRecordPackHeader(m_hitgroupPrograms[rayID], &rec));   // HitgroupRecord.header に， m_hitgroupPrograms[rayID] を登録
-            rec.data.vertex             = (float3*)m_vertexBuffer[meshID].getDevicePointer();
-            rec.data.index              = (uint3*)m_indexBuffer[meshID].getDevicePointer();
-            rec.data.normal             = (float3*)m_normalBuffer[meshID].getDevicePointer();
-            rec.data.tangent            = (float4*)m_tangentBuffer[meshID].getDevicePointer();
-            rec.data.diffuseTexcoord    = (float2*)m_diffuseTexcoordBuffer[meshID].getDevicePointer();
-            rec.data.normalTexcoord     = (float2*)m_normalTexcoordBuffer[meshID].getDevicePointer();
-            rec.data.emissiveTexcoord   = (float2*)m_emissiveTexcoordBuffer[meshID].getDevicePointer();
-            rec.data.color              = (float3*)m_colorBuffer[meshID].getDevicePointer();
-            // Material 情報の登録
-            int materialID = mesh->materialID;
-            if(materialID >= 0){
-                auto material = m_model->materials[materialID];
-                rec.data.roughness  = material->roughness;
-                rec.data.metallic   = material->metallic;
-                rec.data.emissive   = material->emissive;
-                // Material Type
-                if(material->isLight){
-                    rec.data.materialType = MATERIAL_TYPE_LIGHT;
-                } else if (material->isGlass){
-                    rec.data.materialType = MATERIAL_TYPE_GLASS;
-                } else if (material->rmTextureID >= 0){
-                    rec.data.materialType = MATERIAL_TYPE_PRINCIPLED_BRDF;
-                } else {
-                    rec.data.materialType = MATERIAL_TYPE_DIFFUSE;
-                }
-                // Texture の登録
-                if(material->diffuseTextureID >= 0){
-                    rec.data.diffuseTexture.hasTexture  = true;
-                    rec.data.diffuseTexture.texture     = m_textureObjects[material->diffuseTextureID];
-                } 
-                if(material->normalTextureID >= 0){
-                    rec.data.normalTexture.hasTexture   = true;
-                    rec.data.normalTexture.texture      = m_textureObjects[material->normalTextureID];
-                }
-                if(material->rmTextureID >= 0){
-                    rec.data.rmTexture.hasTexture       = true;
-                    rec.data.rmTexture.texture          = m_textureObjects[material->rmTextureID];
-                }
-                if(material->emissiveTextureID >= 0){
-                    rec.data.emissiveTexture.hasTexture  = true;
-                    rec.data.emissiveTexture.texture      = m_textureObjects[material->emissiveTextureID];
-                }
 
+    size_t flat = 0;
+    int numTextures = 0;
+    unsigned int modelIndex = 0;
+    for(auto* mdl: m_models){
+        for(int meshID = 0; meshID < mdl->meshes.size(); ++meshID, ++flat)
+        {
+            auto mesh = mdl->meshes[meshID];
+            for(int rayID = 0; rayID < RAY_TYPE_COUNT; ++rayID)
+            {
+                HitgroupRecord rec;
+                OPTIX_CHECK(optixSbtRecordPackHeader(m_hitgroupPrograms[rayID], &rec));   // HitgroupRecord.header に， m_hitgroupPrograms[rayID] を登録
+                // 幾何情報の登録
+                rec.data.vertex             = (float3*)m_vertexBuffer[flat].getDevicePointer();
+                rec.data.index              = (uint3*)m_indexBuffer[flat].getDevicePointer();
+                rec.data.normal             = (float3*)m_normalBuffer[flat].getDevicePointer();
+                rec.data.tangent            = (float4*)m_tangentBuffer[flat].getDevicePointer();
+                rec.data.diffuseTexcoord    = (float2*)m_diffuseTexcoordBuffer[flat].getDevicePointer();
+                rec.data.normalTexcoord     = (float2*)m_normalTexcoordBuffer[flat].getDevicePointer();
+                rec.data.emissiveTexcoord   = (float2*)m_emissiveTexcoordBuffer[flat].getDevicePointer();
+                rec.data.hasTangent         = mesh->hasTangentSpace;
+                rec.data.hasNormal          = mesh->hasNormal;
+                rec.data.instanceID         = flat;
+
+                
+                // Material 情報の登録
+                int materialID = mesh->materialID;
+                if(materialID >= 0){
+                    auto material = mdl->materials[materialID];
+                    rec.data.roughness  = material->roughness;
+                    rec.data.metallic   = material->metallic;
+                    rec.data.emissive   = material->emissive;
+                    rec.data.color      = material->diffuse;
+                    // Material Type
+                    if(material->isLight){
+                        rec.data.materialType = MATERIAL_TYPE_LIGHT;
+                    } else if (material->isGlass){
+                        rec.data.materialType = MATERIAL_TYPE_GLASS;
+                    } else if (material->rmTextureID >= 0){
+                        rec.data.materialType = MATERIAL_TYPE_PRINCIPLED_BRDF;
+                    } else {
+                        rec.data.materialType = MATERIAL_TYPE_DIFFUSE;
+                    }
+                    // Texture の登録
+                    if(material->diffuseTextureID >= 0){
+                        rec.data.diffuseTexture.hasTexture  = true;
+                        rec.data.diffuseTexture.texture     = m_textureObjects[numTextures + material->diffuseTextureID];
+                    } 
+                    if(material->normalTextureID >= 0){
+                        rec.data.normalTexture.hasTexture   = true;
+                        rec.data.normalTexture.texture      = m_textureObjects[numTextures + material->normalTextureID];
+                    }
+                    if(material->rmTextureID >= 0){
+                        rec.data.rmTexture.hasTexture       = true;
+                        rec.data.rmTexture.texture          = m_textureObjects[numTextures + material->rmTextureID];
+                    }
+                    if(material->emissiveTextureID >= 0){
+                        rec.data.emissiveTexture.hasTexture  = true;
+                        rec.data.emissiveTexture.texture      = m_textureObjects[numTextures + material->emissiveTextureID];
+                    }
+
+                }
+                hitgroupRecords.push_back(rec);
             }
-            hitgroupRecords.push_back(rec);
         }
+        numTextures +=(int)mdl->textures.size();
+        ++modelIndex;
     }
+    
     
     m_hitgroupRecordsBuffer.allocAndUpload(hitgroupRecords);                        // GPU に情報を転送
     m_sbt.hitgroupRecordBase            = m_hitgroupRecordsBuffer.getDevicePointer();    // hitgroupRecords バッファのデバイス上の先頭アドレスを sbt に登録
@@ -1095,11 +1153,16 @@ void Renderer::computeFinalPixelColors()
             break;
     }
 
+    float white = m_white;
+    float exposure = m_exposure;
+    
     void* arg0 = &finalColorBufferPtr;
     void* arg1 = &renderTargetBufferPtr;
     void* arg2 = &fbSize;
+    void* arg3 = &white;
+    void* arg4 = &exposure;
     void* args[] = {
-        arg0, arg1, arg2
+        arg0, arg1, arg2, arg3, arg4
     };
     
 
@@ -1156,10 +1219,22 @@ void Renderer::setEnvMap(const std::string& envMapFileName)
 
     // int ret = LoadEXR(&image, &res.x, &res.y, envMapFileName.c_str(), &err);
     if(image){
+        m_launchParams.envMapInfo.hasEnvMap = true;
         int bytes_per_scanline = compornents_per_pixel * res.x;
         float4*  h_tex_env = (float4*)malloc(res.x * res.y  * sizeof(float4));
-        for (int i = 0; i < res.y; i++) {
-            for (int j = 0; j < res.x; j++) {
+        std::vector<float>  h_patchWeight(m_envPatchWidth * m_envPatchHeight, 0.0f);
+        std::vector<float>  rowSum(m_envPatchHeight, 0.0f);
+        std::vector<float>  h_coarseMarginal(m_envPatchHeight, 0.0f);
+        std::vector<float>  h_coarseConditional(m_envPatchWidth * m_envPatchHeight, 0.0f);
+        float  h_totalWeight = 0.0f;
+        
+        // -----------------------------------
+        // 環境マップのアップロード
+        // -----------------------------------
+
+        // 環境マップデータの格納
+        for (int i = 0; i < res.y; ++i) {
+            for (int j = 0; j < res.x; ++j) {
                 auto pixel = image + i * bytes_per_scanline + j * compornents_per_pixel;
                 float4 tmp;
         
@@ -1168,10 +1243,10 @@ void Renderer::setEnvMap(const std::string& envMapFileName)
                 tmp.z = pixel[2];
                 tmp.w = 1.f;
                 h_tex_env[i * res.x + j] = tmp;
-
             }
         }
 
+        // アップロード
         cudaResourceDesc res_desc = {};
 
         cudaChannelFormatDesc channel_desc;
@@ -1183,7 +1258,6 @@ void Renderer::setEnvMap(const std::string& envMapFileName)
         cudaArray_t pixelArrayEnv;
         CUDA_CHECK(cudaMallocArray(&pixelArrayEnv, &channel_desc, width, height));
         CUDA_CHECK(cudaMemcpy2DToArray(pixelArrayEnv, 0, 0, h_tex_env, pitch, pitch, height, cudaMemcpyHostToDevice));
-
 
         res_desc.resType    = cudaResourceTypeArray;
         res_desc.res.array.array = pixelArrayEnv;
@@ -1208,6 +1282,93 @@ void Renderer::setEnvMap(const std::string& envMapFileName)
         m_envMapArray = pixelArrayEnv;
         m_envMapTex = cudaTex;
         m_launchParams.envMap = cudaTex;
+
+
+        // -----------------------------------
+        // 環境マップの重点的サンプリングのためのデータ作成とアップロード
+        // -----------------------------------
+
+        
+        // 環境マップ重点的サンプリングのためのパッチへの集計
+        for (int y = 0; y < res.y; ++y) {
+            // ヤコビアンの計算
+            float v = ((float)y + 0.5f) / (float)res.y;
+            float theta = v * M_PI;
+            float sinT  = sinf(theta);
+
+            // パッチのインデックス (緯度方向)
+            int py = int(v * (float)m_envPatchHeight);
+            if (py >= (float)m_envPatchHeight) py = m_envPatchHeight - 1;
+
+            for (int x = 0; x < res.x; ++x) {
+                // パッチのインデックス (経度方向)
+                float u = ((float)x + 0.5f) / (float)res.x;
+                int px = int(u * (float)m_envPatchWidth);
+                if (px >= (float)m_envPatchWidth) px = m_envPatchWidth - 1;
+                
+                const float4 c = h_tex_env[y * res.x + x];
+                float luminance = 0.299f * c.x + 0.587f * c.y + 0.114f * c.z;
+                float w = sinT * luminance;
+                
+                h_patchWeight[py * m_envPatchWidth + px] += w;
+            }
+        }
+
+        // 条件付き CDF の計算
+        for (int py = 0; py < m_envPatchHeight; ++py) {
+            float sumRow = 0.0f;
+            for (int px = 0; px < m_envPatchWidth; ++px) {
+                float w = h_patchWeight[py * m_envPatchWidth + px];
+                sumRow += w;
+            }
+            rowSum[py] = sumRow;
+
+            float accum = 0.0f;
+            if(sumRow > 0.0f){
+                for (int px = 0; px < m_envPatchWidth; ++px) {
+                    accum += h_patchWeight[py * m_envPatchWidth + px];
+                    h_coarseConditional[py * m_envPatchWidth + px] = accum / sumRow;
+                }
+                h_coarseConditional[py * m_envPatchWidth + (m_envPatchWidth - 1)] = 1.0f;
+            } else {
+                for(int px = 0; px < m_envPatchWidth; ++px){
+                    h_coarseConditional[py * m_envPatchWidth + px] = float(px + 1) / float(m_envPatchWidth);
+                }
+            }
+        }
+
+        // 周辺 CDF の計算
+        double accum = 0.0;
+        for(int py = 0; py < m_envPatchHeight; ++py) accum += (double)rowSum[py];
+        h_totalWeight = float(accum);
+
+        if(h_totalWeight > 0.0f){
+            double prefix = 0.0;
+            for (int py = 0; py < m_envPatchHeight; ++py) {
+                prefix += (double)rowSum[py];
+                h_coarseMarginal[py] = float(prefix / (double)h_totalWeight);
+            }
+            h_coarseMarginal[m_envPatchHeight - 1] = 1.0f;
+        } else {
+            for (int py = 0; py < m_envPatchHeight; ++py) {
+                h_coarseMarginal[py] = ((float)py + 1.0f) / float(m_envPatchHeight);
+            }
+            h_totalWeight = 1.0f;
+        }
+        
+        // アップロード
+        m_envCDFCoarseMarginal.allocAndUpload(h_coarseMarginal);
+        m_envCDFCoarseConditional.allocAndUpload(h_coarseConditional);
+        m_envPatchWeight.allocAndUpload(h_patchWeight);
+
+        // ポインタの登録
+        m_launchParams.envMapInfo.coarseMarginal = (float*)m_envCDFCoarseMarginal.getDevicePointer();
+        m_launchParams.envMapInfo.coarseConditional = (float*)m_envCDFCoarseConditional.getDevicePointer();
+        m_launchParams.envMapInfo.patchWeight = (float*)m_envPatchWeight.getDevicePointer();
+        m_launchParams.envMapInfo.totalWeight = h_totalWeight;
+        m_launchParams.envMapInfo.patchSize   = make_int2(m_envPatchWidth, m_envPatchHeight);
+
+
         stbi_image_free(image);
         free(h_tex_env);
 
@@ -1219,57 +1380,65 @@ void Renderer::setEnvMap(const std::string& envMapFileName)
 
 void Renderer::createLightTable()
 {
+    //環境マップを光源として登録 (1枚だけ) 
+    LightDefinition lightDefinition;
+    lightDefinition.lightType = LIGHT_TYPE_ENV_SPHERE;
+    lightDefinition.lightIndexInType = 0;
+
+    m_lightDefinitionTable.push_back(lightDefinition);
+
     // 三角形の面光源を登録
-    const int numMeshes = (int)m_model->meshes.size();
+    m_triangleLightDataTable.clear();
 
-    for(int meshID = 0; meshID < numMeshes; meshID++){
-        const TriangleMesh &mesh = *m_model->meshes[meshID];
-        const int materialID = mesh.materialID;
-        const Material& material = *m_model->materials[materialID];
+    int numMeshes = 0;
+    for(auto* mdl : m_models) (int)mdl->meshes.size();
 
-        // //環境マップを光源として登録 (1枚だけ) 
-        LightDefinition lightDefinition;
-        lightDefinition.lightType = LIGHT_TYPE_ENV_SPHERE;
-        lightDefinition.lightIndexInType = 0;
+    for(auto* mdl : m_models){
+        for(int meshID = 0; meshID < (int)mdl->meshes.size(); ++meshID){
+            const TriangleMesh &mesh = *mdl->meshes[meshID];
+            const int materialID = mesh.materialID;
+            const Material& material = *mdl->materials[materialID];
 
-        m_lightDefinitionTable.push_back(lightDefinition);
-
-
-        if(material.isLight ==  true){
-            const float3 constantEmission = material.emissive;
-            const bool hasEmissiveTexture = (material.emissiveTextureID >= 0);
-            for(int triangleID = 0; triangleID < mesh.index.size(); triangleID++){
-                
-                const uint3 index = mesh.index[triangleID]; 
-                
-                TriangleLightData triangleLightData;
-                const float3 v0 = mesh.vertex[index.x];
-                const float3 v1 = mesh.vertex[index.y];
-                const float3 v2 = mesh.vertex[index.z];
-                triangleLightData.v0 = v0;
-                triangleLightData.v1 = v1;
-                triangleLightData.v2 = v2;
-                triangleLightData.normal = normalize(cross(v1 - v0, v2 - v0));
-                triangleLightData.area = 0.5f * length(cross(v1 - v0, v2 - v0));
-                triangleLightData.constantEmission = constantEmission;
-                triangleLightData.uv0 = mesh.emissiveTexcoord[index.x];
-                triangleLightData.uv1 = mesh.emissiveTexcoord[index.y];
-                triangleLightData.uv2 = mesh.emissiveTexcoord[index.z];
-                triangleLightData.emissiveTexture.hasTexture = hasEmissiveTexture;
-                triangleLightData.emissiveTexture.texture = m_textureObjects[material.emissiveTextureID];
-
-                LightDefinition lightDefinition;
-                lightDefinition.lightType = LIGHT_TYPE_TRIANGLE;
-                lightDefinition.lightIndexInType = m_triangleLightDataTable.size();
-
-                m_triangleLightDataTable.push_back(triangleLightData);
-                m_lightDefinitionTable.push_back(lightDefinition);
-            }
             
-        }
+            if(material.isLight ==  true){
+                const float3 constantEmission = material.emissive;
+                const bool hasEmissiveTexture = (material.emissiveTextureID >= 0);
+                for(int triangleID = 0; triangleID < mesh.index.size(); triangleID++){
+                    
+                    const uint3 index = mesh.index[triangleID]; 
+                    
+                    TriangleLightData triangleLightData;
+                    const float3 v0 = mesh.vertex[index.x];
+                    const float3 v1 = mesh.vertex[index.y];
+                    const float3 v2 = mesh.vertex[index.z];
+                    triangleLightData.v0 = v0;
+                    triangleLightData.v1 = v1;
+                    triangleLightData.v2 = v2;
+                    triangleLightData.normal = normalize(cross(v1 - v0, v2 - v0));
+                    triangleLightData.area = 0.5f * length(cross(v1 - v0, v2 - v0));
+                    triangleLightData.constantEmission = constantEmission;
+                    triangleLightData.uv0 = mesh.emissiveTexcoord[index.x];
+                    triangleLightData.uv1 = mesh.emissiveTexcoord[index.y];
+                    triangleLightData.uv2 = mesh.emissiveTexcoord[index.z];
+                    triangleLightData.emissiveTexture.hasTexture = hasEmissiveTexture;
+                    if(hasEmissiveTexture){
+                        triangleLightData.emissiveTexture.texture = m_textureObjects[material.emissiveTextureID];
+                    }
 
+                    LightDefinition lightDefinition;
+                    lightDefinition.lightType = LIGHT_TYPE_TRIANGLE;
+                    lightDefinition.lightIndexInType = m_triangleLightDataTable.size();
+
+                    m_triangleLightDataTable.push_back(triangleLightData);
+                    m_lightDefinitionTable.push_back(lightDefinition);
+                }
+                
+            }
+
+        }
     }
 
+    std::cout << m_lightDefinitionTable.size() << " of lights and " << m_triangleLightDataTable.size() << "of emissive triangles." << std::endl;
     // バッファのアップロード
     m_lightDefinitionBuffer.allocAndUpload(m_lightDefinitionTable);
     m_triangleLightDataBuffer.allocAndUpload(m_triangleLightDataTable);
@@ -1290,3 +1459,20 @@ const CUDABuffer&    Renderer::getFinalColorBuffer() const
 {
     return m_finalColorBuffer;
 };
+
+void Renderer::setWhite(const float white)
+{
+    m_white = white;
+}
+
+float Renderer::getWhite() const{
+    return m_white;
+}
+
+void Renderer::setExposure(const float exposure){
+    m_exposure = exposure;
+}
+
+float Renderer::getExposure() const{
+    return m_exposure;
+}

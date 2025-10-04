@@ -1,5 +1,7 @@
 /build
-/model/
+/model/*
+/envmap/*
 result.log
 imgui.ini
 *.jpg
+/output

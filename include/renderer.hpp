@@ -4,21 +4,25 @@
 #include <optix.h>
 #include <optix_stubs.h>
 #include "helper_math.h"
+#include "my_math.hpp"
 #include "cuda_buffer.h"
 #include "model.h"
 #include "launch_params.h"
 #include <cuda_runtime.h>
 
 enum class OptixModuleIdentifier{
-    OPTIX_MODULE_ID_HIT=0,
-    OPTIX_MODULE_ID_LENS,
+    OPTIX_MODULE_ID_RAYGEN=0,
+    OPTIX_MODULE_ID_AH_RADIANCE,
+    OPTIX_MODULE_ID_AH_SHADOW,
+    OPTIX_MODULE_ID_CH_RADIANCE,
+    OPTIX_MODULE_ID_CH_SHADOW,
+    OPTIX_MODULE_ID_MISS_RADIANCE,
+    OPTIX_MODULE_ID_MISS_SHADOW,
     OPTIX_MODULE_ID_BXDF_DIFFUSE,
     OPTIX_MODULE_ID_BXDF_PRINCIPLED,
     OPTIX_MODULE_ID_BXDF_GLASS,
     OPTIX_MODULE_ID_LIGHTSAMPLE,
-    // MODULE_ID_MISS,
-    // MODULE_ID_CLOSESTHIT,
-    // MODULE_ID_ANYHIT,
+    OPTIX_MODULE_ID_LENS,
     NUM_OPTIX_MODULE_IDENTIFIERS
 };
 
@@ -36,8 +40,8 @@ enum RenderBufferType{
 
 struct Camera {
     // extrinsics
-    float3 from         {make_float3(-15.0f, 15.0f, -7.0f)};
-    float3 at           {make_float3(0.0f, 0.0f, 0.0f)};
+    float3 from         {make_float3(0.0f, 1.0f, 3.0f)};
+    float3 at           {make_float3(0.0f, 1.0f, -1.0f)};
     float3 up           {make_float3(0.f, 1.0f, 0.f)};
 
     //intrinsics
@@ -52,7 +56,7 @@ struct Camera {
 class Renderer 
 {
 public:
-    Renderer(const Model* model);
+    Renderer(std::vector<const Model*> models);
 
     void render();
     void resize(const int2 & newSize);
@@ -67,7 +71,11 @@ public:
     const LaunchParams  getLaunchParams() const;
     const CUDABuffer&   getFinalColorBuffer() const;
 
-
+    // Tonemap 用
+    void setWhite(const float white);
+    float getWhite() const;
+    void setExposure(const float exposure);
+    float getExposure() const;
 
 protected:
     void computeFinalPixelColors();
@@ -134,7 +142,9 @@ protected:
 
     Camera          m_lastSetCamera;
 
-    const Model     *m_model;
+    std::vector<const Model*>   m_models;
+    CUDABuffer                  m_objectMatrix;
+    CUDABuffer                  m_normalMatrix;
 
     std::vector<CUDABuffer> m_vertexBuffer;
     std::vector<CUDABuffer> m_indexBuffer;
@@ -173,6 +183,15 @@ protected:
     std::vector<TriangleLightData>  m_triangleLightDataTable;
     CUDABuffer  m_lightDefinitionBuffer;
     CUDABuffer  m_triangleLightDataBuffer;
+
+    int         m_envPatchWidth         {1024};
+    int         m_envPatchHeight        {512};
+    CUDABuffer  m_envCDFCoarseMarginal;     // H
+    CUDABuffer  m_envCDFCoarseConditional;  // W x H
+    CUDABuffer  m_envPatchWeight;           // W x H
+
+    float m_exposure    {0.5f};
+    float m_white       {5.0f};
     
 };
 

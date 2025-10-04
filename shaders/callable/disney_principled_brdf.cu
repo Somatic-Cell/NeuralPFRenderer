@@ -1,11 +1,11 @@
-#include "config.cuh"
+#include "../config.cuh"
 
 #include <optix.h>
 
-#include "per_ray_data.cuh"
-#include "shader_common.cuh"
-#include "random_number_generator.cuh"
-#include "../include/launch_params.h"
+#include "../params/per_ray_data.cuh"
+#include "../device/shader_common.cuh"
+#include "../device/random_number_generator.cuh"
+#include "../../include/launch_params.h"
 #include <stdio.h>
 
 extern "C" __device__ float3 __direct_callable__brdf_principled_sample(const float3 wo, const IntersectedData& material, PRD* prd)
@@ -27,7 +27,7 @@ extern "C" __device__ float3 __direct_callable__brdf_principled_sample(const flo
     float pdf;
     if(normalizedWeightDiffuse > prd->random()){
         // diffuse
-        wi = cosineSampling(prd->random(), prd->random());
+        wi = randomCosineHemisphere(prd->random(), prd->random());
     } else {
         // specular
         wm = visibleNormalSampling(alpha, wo, prd->random(), prd->random());

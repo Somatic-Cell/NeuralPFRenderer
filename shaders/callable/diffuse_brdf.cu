@@ -1,15 +1,15 @@
-#include "config.cuh"
+#include "../config.cuh"
 
 #include <optix.h>
 
-#include "per_ray_data.cuh"
-#include "shader_common.cuh"
-#include "random_number_generator.cuh"
-#include "../include/launch_params.h"
+#include "../params/per_ray_data.cuh"
+#include "../device/shader_common.cuh"
+#include "../device/random_number_generator.cuh"
+#include "../../include/launch_params.h"
 
 extern "C" __device__ float3 __direct_callable__brdf_diffuse_sample(const float3 wo, const IntersectedData & material, PRD* prd)
 {
-    const float3 wi = random_unit_hemisphere(prd->random(), prd->random());
+    const float3 wi = randomCosineHemisphere(prd->random(), prd->random());
     const float pdf = getLambertPdf(wo, wi);
     prd->pdf.bxdf = pdf;
     prd->lastHitMaterialType = MATERIAL_TYPE_DIFFUSE;

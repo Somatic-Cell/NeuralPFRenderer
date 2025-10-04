@@ -8,7 +8,7 @@ __device__ float clamp01(float x) {
     return fminf(fmaxf(x, 0.f), 1.f);
 }
 
-inline __device__ float4 d_toneMapLocal(const float4 color, float white){
+inline __device__ float4 d_toneMapLocal(const float4 color, const float white){
     // float luminance = 0.3f *0 color.x + 0.6f * color.y + 0.1f * color.z;
     // return color *  (1.f + luminance / powf(white, 2)) / (1.f + luminance);
     // return color / (make_float4(1.0f) + color);
@@ -24,8 +24,12 @@ inline __device__ float4 d_gammacorrect(float4 color, const float gamma) {
 }
 
 extern "C" __global__ void computeFinalPixelColorsKernel(uint32_t *finalColorBuffer,
-                                            float4   *denoisedBuffer,
-                                            int2     size)
+                                            float4  *denoisedBuffer,
+                                            int2    size,
+                                            float   white,
+                                            float   exposure
+                                        
+                                        )
 {
     int pixelX = threadIdx.x + blockIdx.x*blockDim.x;
     int pixelY = threadIdx.y + blockIdx.y*blockDim.y;
@@ -35,7 +39,7 @@ extern "C" __global__ void computeFinalPixelColorsKernel(uint32_t *finalColorBuf
     int pixelID = pixelX + size.x * pixelY;
 
     float4 f4 = denoisedBuffer[pixelID];
-    f4 = clamp(d_gammacorrect(d_toneMapLocal(f4, 1000.0f), 2.2f), 0.0f, 1.0f);
+    f4 = clamp(d_gammacorrect(d_toneMapLocal(f4 * exposure, white), 2.2f), 0.0f, 1.0f);
     uint32_t rgba = 0;
     rgba |= (uint32_t)(f4.x * 255.9f) <<  0;
     rgba |= (uint32_t)(f4.y * 255.9f) <<  8;

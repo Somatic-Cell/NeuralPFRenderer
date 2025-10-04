@@ -1,11 +1,11 @@
-#include "config.cuh"
+#include "../config.cuh"
 
 #include <optix.h>
 
-#include "per_ray_data.cuh"
-#include "shader_common.cuh"
-#include "random_number_generator.cuh"
-#include "../include/launch_params.h"
+#include "../params/per_ray_data.cuh"
+#include "../device/shader_common.cuh"
+#include "../device/random_number_generator.cuh"
+#include "../../include/launch_params.h"
 
 extern "C" __device__ LensRay __direct_callable__lens_pinhole(const float2 screen, const float sample1, const float sample2)
 {

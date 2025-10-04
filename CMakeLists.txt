@@ -6,7 +6,7 @@
 ### JP: CMake のバージョン
 cmake_minimum_required(VERSION 3.18)
 
-set(PROJECT_NAME "SimpleRenderer")
+set(PROJECT_NAME "PhotonicRT")
 set(TARGET_NAME ${PROJECT_NAME})
 
 project(${PROJECT_NAME}
@@ -31,12 +31,12 @@ set(
     "${utils_dir}/cmake")
 
 find_package(CUDAToolkit 12.0 REQUIRED) 
-find_package(OptiX8)
+find_package(OptiX9)
 
-if(OptiX8_FOUND)
-    set(OPTIX_INCLUDE_DIR "${OPTIX8_INCLUDE_DIR}")
+if(OptiX9_FOUND)
+    set(OPTIX_INCLUDE_DIR "${OPTIX9_INCLUDE_DIR}")
 else()
-    message(FATAL_ERROR "OptiX SDK 8.0.0 not found.")
+    message(FATAL_ERROR "OptiX SDK 9.0.0 not found.")
 endif()
 
 include(${utils_dir}/cmake/BuildSettings.cmake)
@@ -116,6 +116,21 @@ target_link_libraries(imgui
     glfw
 )
 
+# json
+add_subdirectory(${EXT_DIR}/json)
+
+# openvdb
+include(${utils_dir}/cmake/BuildVDB.cmake)
+#add_library(nvdb_runtime STATIC .cu)
+#target_link_libraries(nvdb_runtime PRIVATE nanovdb_headers)
+
+if(OPENVDB_AVAILABLE OR WITH_OPENVDB)
+    #add_library(vdb_loader STATIC src/vdbLoader.cpp)
+    if(DEFINED OPENVDB_TARGET)
+        #target_link_libraries(vdb_loader PRIVATE ${OPENVDB_TARGET})
+    endif()
+endif()
+
 ### viewer
 add_subdirectory(viewer)
 target_link_libraries(viewer
@@ -134,6 +149,7 @@ target_link_libraries(viewer
 
 set(CPP_VER_CUDA c++17)
 set(USE_OPTIX_IR FALSE)
+set(CUDA_CC 86)
 
 
 ### コンパイルするファイルを列挙
@@ -147,15 +163,21 @@ set(
 # optixir に変換したいファイル群
 set(
     OPTIX_KERNELS
-    ${PROJECT_SOURCE_DIR}/shaders/lens.cu
-    ${PROJECT_SOURCE_DIR}/shaders/hit.cu
-    ${PROJECT_SOURCE_DIR}/shaders/disney_principled_brdf.cu
-    ${PROJECT_SOURCE_DIR}/shaders/diffuse_brdf.cu
-    ${PROJECT_SOURCE_DIR}/shaders/glass_bsdf.cu
-    ${PROJECT_SOURCE_DIR}/shaders/light_sample.cu
+    ${PROJECT_SOURCE_DIR}/shaders/entry/raygen.cu
+    ${PROJECT_SOURCE_DIR}/shaders/entry/ah_radiance.cu
+    ${PROJECT_SOURCE_DIR}/shaders/entry/ah_shadow.cu
+    ${PROJECT_SOURCE_DIR}/shaders/entry/ch_radiance.cu
+    ${PROJECT_SOURCE_DIR}/shaders/entry/ch_shadow.cu
+    ${PROJECT_SOURCE_DIR}/shaders/entry/miss_radiance.cu
+    ${PROJECT_SOURCE_DIR}/shaders/entry/miss_shadow.cu
+    ${PROJECT_SOURCE_DIR}/shaders/callable/disney_principled_brdf.cu
+    ${PROJECT_SOURCE_DIR}/shaders/callable/diffuse_brdf.cu
+    ${PROJECT_SOURCE_DIR}/shaders/callable/glass_bsdf.cu
+    ${PROJECT_SOURCE_DIR}/shaders/callable/light_sample.cu
+    ${PROJECT_SOURCE_DIR}/shaders/callable/lens.cu
 )
 
-if(OptiX8_FOUND)
+if(OptiX9_FOUND)
     set(USE_OPTIX_IR TRUE)
 else()
     set(
@@ -163,26 +185,27 @@ else()
         ${CUDA_KERNELS}
         ${OPTIX_KERNELS}
     )
-    set(OPTIX_KERNELS )
+    set(OPTIX_KERNELS)
 endif()
 
 # .cu ファイルをコンパイルするのに必要なヘッダファイルたち
 set(
     GPU_KERNEL_DEPENDENCIES
     ${PROJECT_SOURCE_DIR}/utils/helper_math.h
+    ${PROJECT_SOURCE_DIR}/utils/my_math.h
     ${PROJECT_SOURCE_DIR}/include/launch_params.h
+    ${PROJECT_SOURCE_DIR}/shaders/params/per_ray_data.cuh
+    ${PROJECT_SOURCE_DIR}/shaders/device/random_number_generator.cuh
+    ${PROJECT_SOURCE_DIR}/shaders/device/shader_common.cuh
     ${PROJECT_SOURCE_DIR}/shaders/config.cuh
-    ${PROJECT_SOURCE_DIR}/shaders/per_ray_data.cuh
-    ${PROJECT_SOURCE_DIR}/shaders/random_number_generator.cuh
-    ${PROJECT_SOURCE_DIR}/shaders/shader_common.cuh
 )
 
 # .cu ファイルを .ptx ファイルにコンパイル (実装は nvcuda_compile_module.cmake モジュール内)
 set(CUDA_NVCC_OPTIONS
-    "-Xcompiler" "\"/wd 4819 /Zc:__cplusplus\"" # 警告無視，標準準拠オプション
+    "-Xcompiler" "\"/utf-8 /Zc:__cplusplus\""   # 警告無視，標準準拠オプション
     "--generate-line-info"                      # 行番号を付与し，デバッグツール等でどの行が実行中か追跡可能にするオプション
-    "--gpu-architecture=compute_86"             # GPU の構成
-    "--gpu-code=sm_86" 
+    "--gpu-architecture=compute_${CUDA_CC}"     # GPU の構成
+    "--gpu-code=sm_${CUDA_CC}" 
     "-std=${CPP_VER_CUDA}"                  
     "-cudart" "shared"
     "--use_fast_math"                           # 精度を犠牲に高速な近似計算を実行
@@ -215,7 +238,7 @@ message(STATUS "CUDA_KERNELS=${CUDA_KERNELS}")
 if(USE_OPTIX_IR)
     set(OPTIX_NVCC_OPTIONS
         "--generate-line-info"                      # 行番号を付与し，デバッグツール等でどの行が実行中か追跡可能にするオプション
-        "--gpu-architecture=compute_86"             # GPU の構成
+        "--gpu-architecture=compute_${CUDA_CC}"     # GPU の構成
         "-std=${CPP_VER_CUDA}"
         "-cudart" "shared"
         "--use_fast_math"                           # 精度を犠牲に高速な近似計算を実行
@@ -276,19 +299,18 @@ add_executable(${PROJECT_NAME}
 # -----------------------------------------------------
 # ターゲットの設定
 # -----------------------------------------------------
-# set_target_properties(
-#     ${PROJECT_NAME} PROPERTIES
-#     CXX_EXTENSIONS OFF
-#     PROJECT_LABEL "${BASIC_SAMPLE_INDEX_STR}.${PROJECT_NAME}"
-#     FOLDER "samples")
-
 # コンパイル時のマクロ定義の追加
 target_compile_definitions(
     ${PROJECT_NAME} PRIVATE
-    /wd4819
+    /utf-8
     /fsanitize=address
     /O2
 )
+
+if (MSVC)
+  add_compile_options($<$<COMPILE_LANGUAGE:C>:/utf-8>
+                      $<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
+endif()
 
 # CMake 上の変数を C++ に渡す
 if (WIN32)
@@ -308,6 +330,7 @@ target_include_directories(
     ${EXT_DIR}/stb
     ${EXT_DIR}/DirectXTex
     ${EXT_DIR}/assimp/include
+    ${EXT_DIR}/json
 )
 
 # ライブラリやターゲットをリンク
@@ -320,6 +343,7 @@ target_link_libraries(
     imgui
     assimp
     DirectXTex
+    nlohmann_json::nlohmann_json
     CUDA::cudart        # FindCudaToolkit の成果物
     CUDA::cuda_driver   # FindCudaToolkit の成果物 (cuCtxGetCurrent() はここにいる)
 )

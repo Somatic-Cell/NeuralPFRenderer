@@ -21,9 +21,9 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 
 # optix.h の検出
-# まず，ユーザ指定の OPTIX8_INSTALL_DIR 配下の include/ に optix.h があるかどうかを探す
+# まず，ユーザ指定の OPTIX9_INSTALL_DIR 配下の include/ に optix.h があるかどうかを探す
 find_path(
-    OPTIX8_INCLUDE_DIR 
+    OPTIX9_INCLUDE_DIR 
     NAMES optix.h 
     PATHS ${OPTIX9_INSTALL_DIR}/include
     NO_DEFAULT_PATH                 # システム標準のパスは検索しない
@@ -31,7 +31,7 @@ find_path(
 
 # 標準パスも探してみる
 find_path(
-    OPTIX8_INCLUDE_DIR 
+    OPTIX9_INCLUDE_DIR 
     NAMES optix.h 
 )
 

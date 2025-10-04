@@ -1,7 +1,7 @@
 #ifndef CONFIG_CUH_
 #define CONFIG_CUH_
 
-#include "random_number_generator.cuh"
+#include "device/random_number_generator.cuh"
 #include "../include/launch_params.h"
 
 typedef LCG<16> Random;

@@ -303,6 +303,7 @@ public:
             default:
                 break;
         }
+        
     }
 
     // 3次元空間上でのカメラの平行移動
@@ -403,23 +404,25 @@ public:
     virtual void drawImGuiContents();
 
     virtual void key(int key, int mods) override{
-        switch(key)
-        {
-            case 'f':
-            case 'F':
-                std::cout << "Entering 'fly' mode" << std::endl;
-                if(m_flyModeManip) m_cameraFrameManip = m_flyModeManip;
-                break;
-            case 'i':
-            case 'I':
-                std::cout << "Entering 'inspect' mode" << std::endl;
-                if(m_inspectModeManip) m_cameraFrameManip = m_inspectModeManip;
-                break;
-            default:
-                if(m_cameraFrameManip){
-                    m_cameraFrameManip->key(key, mods);
-                }
-                break;
+        if(!m_io->WantCaptureKeyboard){
+            switch(key)
+            {
+                case 'f':
+                case 'F':
+                    std::cout << "Entering 'fly' mode" << std::endl;
+                    if(m_flyModeManip) m_cameraFrameManip = m_flyModeManip;
+                    break;
+                case 'i':
+                case 'I':
+                    std::cout << "Entering 'inspect' mode" << std::endl;
+                    if(m_inspectModeManip) m_cameraFrameManip = m_inspectModeManip;
+                    break;
+                default:
+                    if(m_cameraFrameManip){
+                        m_cameraFrameManip->key(key, mods);
+                    }
+                    break;
+            }
         }
     }
     

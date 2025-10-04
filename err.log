@@ -1,437 +1,77 @@
-Diffuse Texture of Textures\Stringlights_BaseColor.dds uses 0 th texture
-Textures\Stringlights_Normal.dds
-Textures\Stringlights_Specular.dds
-Diffuse Texture of Textures\Paris_StringLights_01_Orange_Color_Emissive_BaseColor.dds uses 0 th texture
-Textures\Paris_StringLights_01_Orange_Color_Emissive_Normal.dds
-Textures\Paris_StringLights_01_Orange_Color_Emissive_Emissive.dds
-Textures\Paris_StringLights_01_Orange_Color_Emissive_Specular.dds
-Diffuse Texture of Textures\Paris_StringLights_01_Blue_Color_Emissive_BaseColor.dds uses 0 th texture
-Textures\Paris_StringLights_01_Blue_Color_Emissive_Normal.dds
-Textures\Paris_StringLights_01_Blue_Color_Emissive_Emissive.dds
-Textures\Paris_StringLights_01_Blue_Color_Emissive_Specular.dds
-Diffuse Texture of Textures\Paris_StringLights_01_White_Color_Emissive_BaseColor.dds uses 0 th texture
-Textures\Paris_StringLights_01_White_Color_Emissive_Normal.dds
-Textures\Paris_StringLights_01_White_Color_Emissive_Emissive.dds
-Textures\Paris_StringLights_01_White_Color_Emissive_Specular.dds
-Diffuse Texture of Textures\Paris_StringLights_01_Pink_Color_Emissive_BaseColor.dds uses 0 th texture
-Textures\Paris_StringLights_01_Pink_Color_Emissive_Normal.dds
-Textures\Paris_StringLights_01_Pink_Color_Emissive_Emissive.dds
-Textures\Paris_StringLights_01_Pink_Color_Emissive_Specular.dds
-Diffuse Texture of Textures\Paris_StringLights_01_Red_Color_Emissive_BaseColor.dds uses 0 th texture
-Textures\Paris_StringLights_01_Red_Color_Emissive_Normal.dds
-Textures\Paris_StringLights_01_Red_Color_Emissive_Emissive.dds
-Textures\Paris_StringLights_01_Red_Color_Emissive_Specular.dds
-Diffuse Texture of Textures\Paris_StringLights_01_Green_Color_Emissive_BaseColor.dds uses 0 th texture
-Textures\Paris_StringLights_01_Green_Color_Emissive_Normal.dds
-Textures\Paris_StringLights_01_Green_Color_Emissive_Emissive.dds
-Textures\Paris_StringLights_01_Green_Color_Emissive_Specular.dds
-Diffuse Texture of Textures\MASTER_Bistro_Main_Door_BaseColor.dds uses 0 th texture
-Textures\MASTER_Bistro_Main_Door_Normal.dds
-Textures\MASTER_Bistro_Main_Door_Specular.dds
-Diffuse Texture of Textures\Pavement_Curbstones_BaseColor.dds uses 0 th texture
-Textures\Pavement_Curbstones_Normal.dds
-Textures\Pavement_Curbstones_Specular.dds
-Diffuse Texture of Textures\Pavement_Manhole_Cover_BaseColor.dds uses 0 th texture
-Textures\Pavement_Manhole_Cover_Normal.dds
-Textures\Pavement_Manhole_Cover_Specular.dds
-Diffuse Texture of Textures\Pavement_Cobblestone_Wet_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\Pavement_Cobblestone_Wet_BLENDSHADER_Normal.dds
-Textures\Pavement_Cobblestone_Wet_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\MASTER_Focus_BaseColor.dds uses 0 th texture
-Textures\MASTER_Focus_Normal.dds
-Textures\MASTER_Focus_Specular.dds
-Diffuse Texture of Textures\Emissive_StreetLight_BaseColor.dds uses 0 th texture
-Textures\Emissive_StreetLight_Normal.dds
-Textures\Emissive_StreetLight_Emissive.dds
-Textures\Emissive_StreetLight_Specular.dds
-Diffuse Texture of Textures\Spotlight_Glass_Emissive_BaseColor.dds uses 0 th texture
-Textures\Spotlight_Glass_Emissive_Normal.dds
-Textures\Spotlight_Glass_Emissive_Emissive.dds
-Textures\Spotlight_Glass_Emissive_Specular.dds
-Diffuse Texture of Textures\LanternEmissive_BaseColor.dds uses 0 th texture
-Textures\LanternEmissive_Normal.dds
-Textures\LanternEmissive_Specular.dds
-Diffuse Texture of Textures\Trashcan_BaseColor.dds uses 0 th texture
-Textures\Trashcan_Normal.dds
-Textures\Trashcan_Specular.dds
-Diffuse Texture of Textures\Banner_Metal_BaseColor.dds uses 0 th texture
-Textures\Banner_Metal_Normal.dds
-Textures\Banner_Metal_Specular.dds
-Diffuse Texture of Textures\Spotlight_Main_BaseColor.dds uses 0 th texture
-Textures\Spotlight_Main_Normal.dds
-Textures\Spotlight_Main_Specular.dds
-Diffuse Texture of Textures\Spotlight_Emissive_BaseColor.dds uses 0 th texture
-Textures\Spotlight_Emissive_Normal.dds
-Textures\Spotlight_Emissive_Specular.dds
-Diffuse Texture of Textures\Paris_TrafficSign_A_BaseColor.dds uses 0 th texture
-Textures\Paris_TrafficSign_A_Normal.dds
-Textures\Paris_TrafficSign_A_Specular.dds
-Diffuse Texture of Textures\Paris_Table_Terrace_BaseColor.dds uses 0 th texture
-Textures\Paris_Table_Terrace_Normal.dds
-Textures\Paris_Table_Terrace_Specular.dds
-Diffuse Texture of Textures\Paris_StreetSign_01_BaseColor.dds uses 0 th texture
-Textures\Paris_StreetSign_01_Normal.dds
-Textures\Paris_StreetSign_01_Specular.dds
-Diffuse Texture of Textures\Paris_StreetPivot_BaseColor.dds uses 0 th texture
-Textures\Paris_StreetPivot_Normal.dds
-Textures\Paris_StreetPivot_Specular.dds
-Diffuse Texture of Textures\Streetlight_Metal_BaseColor.dds uses 0 th texture
-Textures\Streetlight_Metal_Normal.dds
-Textures\Streetlight_Metal_Specular.dds
-Diffuse Texture of Textures\Paris_StringLights_01_White_Color_BaseColor.dds uses 0 th texture
-Textures\Paris_StringLights_01_White_Color_Normal.dds
-Textures\Paris_StringLights_01_White_Color_Specular.dds
-Diffuse Texture of Textures\Streetlight_Support_Bulb_BaseColor.dds uses 0 th texture
-Textures\Streetlight_Support_Bulb_Normal.dds
-Textures\Streetlight_Support_Bulb_Specular.dds
-Diffuse Texture of Textures\Streetlight_Chains_BaseColor.dds uses 0 th texture
-Textures\Streetlight_Chains_Normal.dds
-Textures\Streetlight_Chains_Specular.dds
-Diffuse Texture of Textures\Concrete3_BaseColor.dds uses 0 th texture
-Textures\Concrete3_Normal.dds
-Textures\Concrete3_Specular.dds
-Diffuse Texture of Textures\MASTER_Brick_Small_Red_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\MASTER_Brick_Small_Red_BLENDSHADER_Normal.dds
-Textures\MASTER_Brick_Small_Red_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\Pavement_Ground_Wet_BaseColor.dds uses 0 th texture
-Textures\Pavement_Ground_Wet_Normal.dds
-Textures\Pavement_Ground_Wet_Specular.dds
-Diffuse Texture of Textures\Pavement_Cobble_Leaves_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\Pavement_Cobble_Leaves_BLENDSHADER_Normal.dds
-Textures\Pavement_Cobble_Leaves_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\Pavement_Cobblestone_01_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\Pavement_Cobblestone_01_BLENDSHADER_Normal.dds
-Textures\Pavement_Cobblestone_01_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\Pavement_Cobblestone_Wet_Leaves_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\Pavement_Cobblestone_Wet_Leaves_BLENDSHADER_Normal.dds
-Textures\Pavement_Cobblestone_Wet_Leaves_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\Pavement_Cobblestone_Small_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\Pavement_Cobblestone_Small_BLENDSHADER_Normal.dds
-Textures\Pavement_Cobblestone_Small_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\Pavement_Cobblestone_Big_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\Pavement_Cobblestone_Big_BLENDSHADER_Normal.dds
-Textures\Pavement_Cobblestone_Big_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\Pavement_Brick_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\Pavement_Brick_BLENDSHADER_Normal.dds
-Textures\Pavement_Brick_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\Pavement_Cobblestone_02_BaseColor.dds uses 0 th texture
-Textures\Pavement_Cobblestone_02_Normal.dds
-Textures\Pavement_Cobblestone_02_Specular.dds
-Diffuse Texture of Textures\Sidewalkbarrier_BaseColor.dds uses 0 th texture
-Textures\Sidewalkbarrier_Normal.dds
-Textures\Sidewalkbarrier_Specular.dds
-Diffuse Texture of Textures\Shopsign_Pharmacy_Emissive_BaseColor.dds uses 0 th texture
-Textures\Shopsign_Pharmacy_Emissive_Normal.dds
-Textures\Shopsign_Pharmacy_Emissive_Emissive.dds
-Textures\Shopsign_Pharmacy_Emissive_Specular.dds
-Diffuse Texture of Textures\Shopsign_Book_Store_Emissive_BaseColor.dds uses 0 th texture
-Textures\Shopsign_Book_Store_Emissive_Normal.dds
-Textures\Shopsign_Book_Store_Emissive_Emissive.dds
-Textures\Shopsign_Book_Store_Emissive_Specular.dds
-Diffuse Texture of Textures\Antenna_Metal_BaseColor.dds uses 0 th texture
-Textures\Antenna_Metal_Normal.dds
-Textures\Antenna_Metal_Specular.dds
-Diffuse Texture of Textures\Shopsign_Bakery_BaseColor.dds uses 0 th texture
-Textures\Shopsign_Bakery_Normal.dds
-Textures\Shopsign_Bakery_Specular.dds
-Diffuse Texture of Textures\MASTER_Metal_BaseColor.dds uses 0 th texture
-Textures\MASTER_Metal_Normal.dds
-Textures\MASTER_Metal_Specular.dds
-Diffuse Texture of Textures\Shopsign_Ties_Shop_BaseColor.dds uses 0 th texture
-Textures\Shopsign_Ties_Shop_Normal.dds
-Textures\Shopsign_Ties_Shop_Specular.dds
-Diffuse Texture of Textures\Plantpots_BaseColor.dds uses 0 th texture
-Textures\Plantpots_Normal.dds
-Textures\Plantpots_Specular.dds
-Diffuse Texture of Textures\NapkinHolder_BaseColor.dds uses 0 th texture
-Textures\NapkinHolder_Normal.dds
-Textures\NapkinHolder_Specular.dds
-Diffuse Texture of Textures\MenuSign_02_Mesh_BaseColor.dds uses 0 th texture
-Textures\MenuSign_02_Mesh_Normal.dds
-Textures\MenuSign_02_Mesh_Specular.dds
-Diffuse Texture of Textures\MenuSign_02_Glass_BaseColor.dds uses 0 th texture
-Textures\MenuSign_02_Glass_Normal.dds
-Textures\MenuSign_02_Glass_Specular.dds
-Diffuse Texture of Textures\MenuSign_01_BaseColor.dds uses 0 th texture
-Textures\MenuSign_01_Normal.dds
-Textures\MenuSign_01_Specular.dds
-Diffuse Texture of Textures\Balcony_Concrete_BaseColor.dds uses 0 th texture
-Textures\Balcony_Concrete_Normal.dds
-Textures\Balcony_Concrete_Specular.dds
-Diffuse Texture of Textures\Balcony_Trims_BaseColor.dds uses 0 th texture
-Textures\Balcony_Trims_Normal.dds
-Textures\Balcony_Trims_Specular.dds
-Diffuse Texture of Textures\Balcony_Ornaments_BaseColor.dds uses 0 th texture
-Textures\Balcony_Ornaments_Normal.dds
-Textures\Balcony_Ornaments_Specular.dds
-Diffuse Texture of Textures\Balcony_Green_Wood_BaseColor.dds uses 0 th texture
-Textures\Balcony_Green_Wood_Normal.dds
-Textures\Balcony_Green_Wood_Specular.dds
-Diffuse Texture of Textures\MASTER_Glass_Dirty_MASKED_BaseColor.dds uses 0 th texture
-Textures\MASTER_Glass_Dirty_MASKED_Normal.dds
-Textures\MASTER_Glass_Dirty_MASKED_Specular.dds
-Diffuse Texture of Textures\Paris_LiquorBottle_01_Glass_Wine_BaseColor.dds uses 0 th texture
-Textures\Paris_LiquorBottle_01_Glass_Wine_Normal.dds
-Textures\Paris_LiquorBottle_01_Glass_Wine_Specular.dds
-Diffuse Texture of Textures\Paris_LiquorBottle_01_Caps_BaseColor.dds uses 0 th texture
-Textures\Paris_LiquorBottle_01_Caps_Normal.dds
-Textures\Paris_LiquorBottle_01_Caps_Specular.dds
-Diffuse Texture of Textures\Paris_LiquorBottle_01_Labels_BaseColor.dds uses 0 th texture
-Textures\Paris_LiquorBottle_01_Labels_Normal.dds
-Diffuse Texture of Textures\Foliage_Paris_Flowers_BaseColor.dds uses 0 th texture
-Textures\Foliage_Paris_Flowers_Normal.dds
-Textures\Foliage_Paris_Flowers_Specular.dds
-Diffuse Texture of Textures\Foliage_Flowers_BaseColor.dds uses 0 th texture
-Textures\Foliage_Flowers_Normal.dds
-Textures\Foliage_Flowers_Specular.dds
-Diffuse Texture of Textures\ElectricBox_BaseColor.dds uses 0 th texture
-Textures\ElectricBox_Normal.dds
-Textures\ElectricBox_Specular.dds
-Diffuse Texture of Textures\Concrete_BaseColor.dds uses 0 th texture
-Textures\Concrete_Normal.dds
-Textures\Concrete_Specular.dds
-Diffuse Texture of Textures\Concrete_Striped_BaseColor.dds uses 0 th texture
-Textures\Concrete_Striped_Normal.dds
-Textures\Concrete_Striped_Specular.dds
-Diffuse Texture of Textures\Concrete2_BaseColor.dds uses 0 th texture
-Textures\Concrete2_Normal.dds
-Textures\Concrete2_Specular.dds
-Diffuse Texture of Textures\MASTER_Black_Metal_BaseColor.dds uses 0 th texture
-Textures\MASTER_Black_Metal_Normal.dds
-Textures\MASTER_Black_Metal_Specular.dds
-Diffuse Texture of Textures\Chimneys_Metal_BaseColor.dds uses 0 th texture
-Textures\Chimneys_Metal_Normal.dds
-Textures\Chimneys_Metal_Specular.dds
-Diffuse Texture of Textures\Plaster_BaseColor.dds uses 0 th texture
-Textures\Plaster_Normal.dds
-Textures\Plaster_Specular.dds
-Diffuse Texture of Textures\Paris_Chair_01_BaseColor.dds uses 0 th texture
-Textures\Paris_Chair_01_Normal.dds
-Textures\Paris_Chair_01_Specular.dds
-Diffuse Texture of Textures\MASTER_Grain_Metal_BaseColor.dds uses 0 th texture
-Textures\MASTER_Grain_Metal_Normal.dds
-Textures\MASTER_Grain_Metal_Specular.dds
-Diffuse Texture of Textures\MASTER_Curtains_BaseColor.dds uses 0 th texture
-Textures\MASTER_Curtains_Normal.dds
-Textures\MASTER_Curtains_Specular.dds
-Diffuse Texture of Textures\MASTER_Concrete_Plaster_BaseColor.dds uses 0 th texture
-Textures\MASTER_Concrete_Plaster_Normal.dds
-Textures\MASTER_Concrete_Plaster_Specular.dds
-Diffuse Texture of Textures\MASTER_Roofing_Shingle_Grey_BaseColor.dds uses 0 th texture
-Textures\MASTER_Roofing_Shingle_Grey_Normal.dds
-Textures\MASTER_Roofing_Shingle_Grey_Specular.dds
-Diffuse Texture of Textures\MASTER_Wood_Painted_Green_BaseColor.dds uses 0 th texture
-Textures\MASTER_Wood_Painted_Green_Normal.dds
-Textures\MASTER_Wood_Painted_Green_Specular.dds
-Diffuse Texture of Textures\MASTER_Room_Interior_BaseColor.dds uses 0 th texture
-Textures\MASTER_Room_Interior_Normal.dds
-Textures\MASTER_Room_Interior_Specular.dds
-Diffuse Texture of Textures\MASTER_Brick_Large_Beige_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\MASTER_Brick_Large_Beige_BLENDSHADER_Normal.dds
-Textures\MASTER_Brick_Large_Beige_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\MASTER_Doors_BaseColor.dds uses 0 th texture
-Textures\MASTER_Doors_Normal.dds
-Textures\MASTER_Doors_Specular.dds
-Diffuse Texture of Textures\MASTER_Concrete_BaseColor.dds uses 0 th texture
-Textures\MASTER_Concrete_Normal.dds
-Textures\MASTER_Concrete_Specular.dds
-Diffuse Texture of Textures\MASTER_Forge_Metal_BaseColor.dds uses 0 th texture
-Textures\MASTER_Forge_Metal_Normal.dds
-Textures\MASTER_Forge_Metal_Specular.dds
-Diffuse Texture of Textures\MASTER_Wood_Brown_BaseColor.dds uses 0 th texture
-Textures\MASTER_Wood_Brown_Normal.dds
-Textures\MASTER_Wood_Brown_Specular.dds
-Diffuse Texture of Textures\MASTER_Concrete_Grooved_BaseColor.dds uses 0 th texture
-Textures\MASTER_Concrete_Grooved_Normal.dds
-Textures\MASTER_Concrete_Grooved_Specular.dds
-Diffuse Texture of Textures\MASTER_Concrete_Smooth_BaseColor.dds uses 0 th texture
-Textures\MASTER_Concrete_Smooth_Normal.dds
-Textures\MASTER_Concrete_Smooth_Specular.dds
-Diffuse Texture of Textures\MASTER_Concrete_Plaster1_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\MASTER_Concrete_Plaster1_BLENDSHADER_Normal.dds
-Textures\MASTER_Concrete_Plaster1_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\MASTER_Plastic_BaseColor.dds uses 0 th texture
-Textures\MASTER_Plastic_Normal.dds
-Textures\MASTER_Plastic_Specular.dds
-Diffuse Texture of Textures\MASTER_Frosted_Glass_BaseColor.dds uses 0 th texture
-Textures\MASTER_Frosted_Glass_Normal.dds
-Textures\MASTER_Frosted_Glass_Specular.dds
-Diffuse Texture of Textures\MASTER_Awning_Fabric_Red_BaseColor.dds uses 0 th texture
-Textures\MASTER_Awning_Fabric_Red_Normal.dds
-Textures\MASTER_Awning_Fabric_Red_Specular.dds
-Diffuse Texture of Textures\MASTER_Boulangerie_BaseColor.dds uses 0 th texture
-Textures\MASTER_Boulangerie_Normal.dds
-Textures\MASTER_Boulangerie_Specular.dds
-Diffuse Texture of Textures\MASTER_Awning_Beams_BaseColor.dds uses 0 th texture
-Textures\MASTER_Awning_Beams_Normal.dds
-Textures\MASTER_Awning_Beams_Specular.dds
-Diffuse Texture of Textures\MASTER_Roofing_Metal_01_BaseColor.dds uses 0 th texture
-Textures\MASTER_Roofing_Metal_01_Normal.dds
-Textures\MASTER_Roofing_Metal_01_Specular.dds
-Diffuse Texture of Textures\MASTER_Details_Dark_BaseColor.dds uses 0 th texture
-Textures\MASTER_Details_Dark_Normal.dds
-Textures\MASTER_Details_Dark_Specular.dds
-Diffuse Texture of Textures\MASTER_Rollup_Door_BaseColor.dds uses 0 th texture
-Textures\MASTER_Rollup_Door_Normal.dds
-Textures\MASTER_Rollup_Door_Specular.dds
-Diffuse Texture of Textures\MASTER_Building_Details_BaseColor.dds uses 0 th texture
-Textures\MASTER_Building_Details_Normal.dds
-Textures\MASTER_Building_Details_Specular.dds
-Diffuse Texture of Textures\MASTER_Wood_Painted_Cyan_BaseColor.dds uses 0 th texture
-Textures\MASTER_Wood_Painted_Cyan_Normal.dds
-Textures\MASTER_Wood_Painted_Cyan_Specular.dds
-Diffuse Texture of Textures\MASTER_Glass_Dirty_BaseColor.dds uses 0 th texture
-Textures\MASTER_Glass_Dirty_Normal.dds
-Textures\MASTER_Glass_Dirty_Specular.dds
-Diffuse Texture of Textures\MASTER_Awning_Fabric_Cyan_BaseColor.dds uses 0 th texture
-Textures\MASTER_Awning_Fabric_Cyan_Normal.dds
-Textures\MASTER_Awning_Fabric_Cyan_Specular.dds
-Diffuse Texture of Textures\MASTER_Wood_Painted3_BaseColor.dds uses 0 th texture
-Textures\MASTER_Wood_Painted3_Normal.dds
-Textures\MASTER_Wood_Painted3_Specular.dds
-Diffuse Texture of Textures\MASTER_Bronze_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\MASTER_Bronze_BLENDSHADER_Normal.dds
-Textures\MASTER_Bronze_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\MASTER_Wood_Painted_Green_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\MASTER_Wood_Painted_Green_BLENDSHADER_Normal.dds
-Textures\MASTER_Wood_Painted_Green_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\MASTER_Concrete_Smooth_BLENDSHADER_BaseColor.dds uses 0 th texture
-Textures\MASTER_Concrete_Smooth_BLENDSHADER_Normal.dds
-Textures\MASTER_Concrete_Smooth_BLENDSHADER_Specular.dds
-Diffuse Texture of Textures\MASTER_Book_Covers_BaseColor.dds uses 0 th texture
-Textures\MASTER_Book_Covers_Normal.dds
-Textures\MASTER_Book_Covers_Specular.dds
-Diffuse Texture of Textures\MASTER_Concrete_White_BaseColor.dds uses 0 th texture
-Textures\MASTER_Concrete_White_Normal.dds
-Textures\MASTER_Concrete_White_Specular.dds
-Diffuse Texture of Textures\MASTER_Brick_Small_Red_BaseColor.dds uses 0 th texture
-Textures\MASTER_Brick_Small_Red_Normal.dds
-Textures\MASTER_Brick_Small_Red_Specular.dds
-Diffuse Texture of Textures\MASTER_Brick_Large_White_BaseColor.dds uses 0 th texture
-Textures\MASTER_Brick_Large_White_Normal.dds
-Textures\MASTER_Brick_Large_White_Specular.dds
-Diffuse Texture of Textures\MASTER_Light_Bulb_BaseColor.dds uses 0 th texture
-Textures\MASTER_Light_Bulb_Normal.dds
-Textures\MASTER_Light_Bulb_Specular.dds
-Diffuse Texture of Textures\MASTER_Glass_Exterior_BaseColor.dds uses 0 th texture
-Textures\MASTER_Glass_Exterior_Normal.dds
-Textures\MASTER_Glass_Exterior_Specular.dds
-Diffuse Texture of Textures\MASTER_Side_Letters_BaseColor.dds uses 0 th texture
-Textures\MASTER_Side_Letters_Normal.dds
-Textures\MASTER_Side_Letters_Specular.dds
-Diffuse Texture of Textures\MASTER_Concrete1_BaseColor.dds uses 0 th texture
-Textures\MASTER_Concrete1_Normal.dds
-Textures\MASTER_Concrete1_Specular.dds
-Diffuse Texture of Textures\MASTER_Focus_Ornament_BaseColor.dds uses 0 th texture
-Textures\MASTER_Focus_Ornament_Normal.dds
-Textures\MASTER_Focus_Ornament_Specular.dds
-Diffuse Texture of Textures\MASTER_Metal_Pipe_BaseColor.dds uses 0 th texture
-Textures\MASTER_Metal_Pipe_Normal.dds
-Textures\MASTER_Metal_Pipe_Specular.dds
-Diffuse Texture of Textures\MASTER_Wood_Polished_BaseColor.dds uses 0 th texture
-Textures\MASTER_Wood_Polished_Normal.dds
-Textures\MASTER_Wood_Polished_Specular.dds
-Diffuse Texture of Textures\MASTER_Concrete_Yellow_BaseColor.dds uses 0 th texture
-Textures\MASTER_Concrete_Yellow_Normal.dds
-Textures\MASTER_Concrete_Yellow_Specular.dds
-Diffuse Texture of Textures\MASTER_Roofing_Shingle_Green_BaseColor.dds uses 0 th texture
-Textures\MASTER_Roofing_Shingle_Green_Normal.dds
-Textures\MASTER_Roofing_Shingle_Green_Specular.dds
-Diffuse Texture of Textures\MASTER_Trim_Cornice_BaseColor.dds uses 0 th texture
-Textures\MASTER_Trim_Cornice_Normal.dds
-Textures\MASTER_Trim_Cornice_Specular.dds
-Diffuse Texture of Textures\Bollards_BaseColor.dds uses 0 th texture
-Textures\Bollards_Normal.dds
-Textures\Bollards_Specular.dds
-Diffuse Texture of Textures\Bistro_Sign_Main_BaseColor.dds uses 0 th texture
-Textures\Bistro_Sign_Main_Normal.dds
-Textures\Bistro_Sign_Main_Specular.dds
-Diffuse Texture of Textures\Bistro_Sign_Letters_BaseColor.dds uses 0 th texture
-Textures\Bistro_Sign_Letters_Normal.dds
-Textures\Bistro_Sign_Letters_Specular.dds
-Diffuse Texture of Textures\Awnings_Hotel_Fabric_BaseColor.dds uses 0 th texture
-Textures\Awnings_Hotel_Fabric_Normal.dds
-Textures\Awnings_Hotel_Fabric_Specular.dds
-Diffuse Texture of Textures\Awnings_Fabric_BaseColor.dds uses 0 th texture
-Textures\Awnings_Fabric_Normal.dds
-Textures\Awnings_Fabric_Specular.dds
-Diffuse Texture of Textures\Awnings_Beams_BaseColor.dds uses 0 th texture
-Textures\Awnings_Beams_Normal.dds
-Textures\Awnings_Beams_Specular.dds
-Diffuse Texture of Textures\Ashtray_BaseColor.dds uses 0 th texture
-Textures\Ashtray_Normal.dds
-Textures\Ashtray_Specular.dds
-Diffuse Texture of Textures\Antenna_Plastic_Blue_BaseColor.dds uses 0 th texture
-Textures\Antenna_Plastic_Blue_Normal.dds
-Textures\Antenna_Plastic_Blue_Specular.dds
-Diffuse Texture of Textures\Antenna_Plastic_BaseColor.dds uses 0 th texture
-Textures\Antenna_Plastic_Normal.dds
-Textures\Antenna_Plastic_Specular.dds
-Diffuse Texture of Textures\Foliage_Linde_Tree_Large_Trunk_BaseColor.dds uses 0 th texture
-Textures\Foliage_Linde_Tree_Large_Trunk_Normal.dds
-Textures\Foliage_Linde_Tree_Large_Trunk_Specular.dds
-Diffuse Texture of Textures\Foliage_Linde_Tree_Large_Orange_Leaves_BaseColor.dds uses 0 th texture
-Textures\Foliage_Linde_Tree_Large_Orange_Leaves_Normal.dds
-Textures\Foliage_Linde_Tree_Large_Orange_Leaves_Specular.dds
-Diffuse Texture of Textures\Foliage_Linde_Tree_Large_Green_Leaves_BaseColor.dds uses 0 th texture
-Textures\Foliage_Linde_Tree_Large_Green_Leaves_Normal.dds
-Textures\Foliage_Linde_Tree_Large_Green_Leaves_Specular.dds
-Diffuse Texture of Textures\Foliage_Ivy_branches_BaseColor.dds uses 0 th texture
-Textures\Foliage_Ivy_branches_Normal.dds
-Textures\Foliage_Ivy_branches_Specular.dds
-Diffuse Texture of Textures\Foliage_Ivy_leaf_a_BaseColor.dds uses 0 th texture
-Textures\Foliage_Ivy_leaf_a_Normal.dds
-Textures\Foliage_Ivy_leaf_a_Specular.dds
-Diffuse Texture of Textures\Foliage_Bux_Hedges46_BaseColor.dds uses 0 th texture
-Textures\Foliage_Bux_Hedges46_Normal.dds
-Textures\Foliage_Bux_Hedges46_Specular.dds
-Diffuse Texture of Textures\Vespa_BaseColor.dds uses 0 th texture
-Textures\Vespa_Normal.dds
-Textures\Vespa_Specular.dds
-Diffuse Texture of Textures\Vespa_Odometer_BaseColor.dds uses 0 th texture
-Textures\Vespa_Odometer_Normal.dds
-Textures\Vespa_Odometer_Specular.dds
-Diffuse Texture of Textures\Vespa_Odometer_Glass_BaseColor.dds uses 0 th texture
-Textures\Vespa_Odometer_Glass_Normal.dds
-Textures\Vespa_Odometer_Glass_Specular.dds
-Diffuse Texture of Textures\Foliage_Leaves_BaseColor.dds uses 0 th texture
-Textures\Foliage_Leaves_Normal.dds
-Textures\Foliage_Leaves_Specular.dds
-Diffuse Texture of Textures\Foliage_Trunk_BaseColor.dds uses 0 th texture
-Textures\Foliage_Trunk_Normal.dds
-Textures\Foliage_Trunk_Specular.dds
-Diffuse Texture of Textures\Vespa_Headlight_BaseColor.dds uses 0 th texture
-Textures\Vespa_Headlight_Normal.dds
-Textures\Vespa_Headlight_Specular.dds
-[ 4][   DISKCACHE]: Cache hit for key: ptx-48692-key0fdcf43f65263f27f487682b89a21c77-sm_86-rtc1-drv560.94
+Diffuse Texture of textures\sponza_thorn_diff.png uses 0 th texture
+Diffuse Texture of textures\vase_round.png uses 0 th texture
+Diffuse Texture of textures\vase_plant.png uses 0 th texture
+Diffuse Texture of textures\background.png uses 0 th texture
+Diffuse Texture of textures\spnza_bricks_a_diff.png uses 0 th texture
+textures\spnza_bricks_a_spec.png
+Diffuse Texture of textures\sponza_arch_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_ceiling_a_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_column_a_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_floor_a_diff.png uses 0 th texture
+textures\floor_gloss.png
+Diffuse Texture of textures\sponza_column_c_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_details_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_column_b_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_flagpole_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_fabric_green_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_fabric_blue_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_fabric_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_curtain_blue_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_curtain_diff.png uses 0 th texture
+Diffuse Texture of textures\sponza_curtain_green_diff.png uses 0 th texture
+Diffuse Texture of textures\chain_texture.png uses 0 th texture
+Diffuse Texture of textures\vase_hanging.png uses 0 th texture
+textures\vase_hanging.png
+Diffuse Texture of textures\vase_dif.png uses 0 th texture
+Diffuse Texture of textures\lion.png uses 0 th texture
+Diffuse Texture of textures\sponza_roof_diff.png uses 0 th texture
+[ 4][   DISKCACHE]: Cache hit for key: ptx-16668-key18766a70ad3ff03e81f25c8afbac33ba-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
-[ 4][   DISKCACHE]: Cache hit for key: ptx-10088-key6a958e519d11a30ac6d5f18fff5d0181-sm_86-rtc1-drv560.94
+[ 4][   DISKCACHE]: Cache hit for key: ptx-7324-keyd3d3626c58505834a44acdfdc02c2d78-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
-[ 4][   DISKCACHE]: Cache hit for key: ptx-5660-keyc7083d9a67ff0cb86377e93249026df6-sm_86-rtc1-drv560.94
+[ 4][   DISKCACHE]: Cache hit for key: ptx-7404-key4aa43e99a2dd3b85fbc54b49b9c0f1ee-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
-[ 4][   DISKCACHE]: Cache hit for key: ptx-13756-key8359e27133f407509d07743a2a71a730-sm_86-rtc1-drv560.94
+[ 4][   DISKCACHE]: Cache hit for key: ptx-32364-key58a7a405b2d47c765348d2b7283c392c-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
-[ 4][   DISKCACHE]: Cache hit for key: ptx-7292-key7e2aa3ed446d7a23acc8e6db5cb214df-sm_86-rtc1-drv560.94
+[ 4][   DISKCACHE]: Cache hit for key: ptx-3248-keyac074696717a083568b3c487bda99719-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
-[ 4][   DISKCACHE]: Cache hit for key: ptx-11456-key04ad3efe3b15056e159a310bf8739558-sm_86-rtc1-drv560.94
+[ 4][   DISKCACHE]: Cache hit for key: ptx-10272-key2053af155086d30ddd3ffd42095b69fe-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
-[ 4][   DISKCACHE]: Cache hit for key: ptx-93-keyaa33d08617ceb4704c859bef77b60ef0-sm_86-rtc1-drv560.94
+[ 4][   DISKCACHE]: Cache hit for key: ptx-4176-keye92571399720646895fad594b8eff7cd-sm_86-rtc1-drv581.42
+
+[ 4][    COMPILER]: 
+[ 4][   DISKCACHE]: Cache hit for key: ptx-5660-key7dd2571e51a78a1583b442c45280519a-sm_86-rtc1-drv581.42
+
+[ 4][    COMPILER]: 
+[ 4][   DISKCACHE]: Cache hit for key: ptx-13236-keye349ec3b8697a288fc87df077641c184-sm_86-rtc1-drv581.42
+
+[ 4][    COMPILER]: 
+[ 4][   DISKCACHE]: Cache hit for key: ptx-6624-keye86c7b5173db6883da2b8739d5f29be3-sm_86-rtc1-drv581.42
+
+[ 4][    COMPILER]: 
+[ 4][   DISKCACHE]: Cache hit for key: ptx-21632-key4138457d95b16938853fe77d6b1d93c1-sm_86-rtc1-drv581.42
+
+[ 4][    COMPILER]: 
+[ 4][   DISKCACHE]: Cache hit for key: ptx-10208-key165050e59e8aefeff976de5877b571b5-sm_86-rtc1-drv581.42
+
+[ 4][    COMPILER]: 
+[ 4][   DISKCACHE]: Cache hit for key: ptx-93-key010b1920bf326255357df2b481a33400-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
 [ 4][    COMPILER]: Info: Pipeline statistics
-	module(s)                            :     6
+	module(s)                            :    12
 	entry function(s)                    :    17
 	trace call(s)                        :     2
 	continuation callable call(s)        :     0
 	direct callable call(s)              :     6
-	basic block(s) in entry functions    :   100
-	instruction(s) in entry functions    :  3968
+	basic block(s) in entry functions    :   122
+	instruction(s) in entry functions    :  4684
 	non-entry function(s)                :     0
 	basic block(s) in non-entry functions:     0
 	instruction(s) in non-entry functions:     0

@@ -1,14 +1,16 @@
-#include "config.cuh"
+#include "../config.cuh"
 
 #include <optix.h>
 
-#include "per_ray_data.cuh"
-#include "shader_common.cuh"
-#include "random_number_generator.cuh"
-#include "../include/launch_params.h"
+#include "../params/per_ray_data.cuh"
+#include "../device/shader_common.cuh"
+#include "../device/random_number_generator.cuh"
+#include "../../include/launch_params.h"
 
 extern "C" __device__ float3 __direct_callable__bsdf_glass_sample(const float3 wo, const IntersectedData& material, PRD* prd)
 {
+    prd->lastHitMaterialType = MATERIAL_TYPE_GLASS;
+
     float cosThetaI = wo.y;
     float eta = 1.0f / material.ior;
     float3 N = make_float3(0.f, 1.0f, 0.f);
@@ -23,20 +25,26 @@ extern "C" __device__ float3 __direct_callable__bsdf_glass_sample(const float3 w
 
     float sin2ThetaT = (1.0f - cosThetaI * cosThetaI) * eta * eta;
 
-    if(sin2ThetaT > 1.0f || prd->random() < fresnel){
-        prd->position +=  N * 1e-3f;
+    if(sin2ThetaT > 1.0f)
+    {
+        prd->pdf.bxdf = 1.0f;
+        return normalize(- 1.0f * wo + N * 2.f * dot(N, wo));
+    }
+    else if(prd->random() < fresnel){
+        // prd->position +=  N * 1e-3f;
+        prd->pdf.bxdf = fresnel;
         return normalize(- 1.0f * wo + N * 2.f * dot(N, wo));
     } else {
         float cosThetaT = sqrtf(fmaxf(1.0f - sin2ThetaT, 1e-7f));
-        prd->position -=  N * 1e-3f;
+        // prd->position -=  N * 1e-3f;
+        prd->pdf.bxdf = 1.0f - fresnel;
         return normalize(eta * (-1.0f * wo) + (eta * cosThetaI - cosThetaT) * N);   
     }
-    prd->lastHitMaterialType = MATERIAL_TYPE_GLASS;
 }
 
 extern "C" __device__ float3 __direct_callable__bsdf_glass_eval(const float3 wi, const float3 wo, const IntersectedData& material, PRD* prd)
 {
-    const float pdf = getLambertPdf(wo, wi);
-    prd->pdf.bxdf = pdf;
-    return evalLambertBRDF(material.baseColor, wo, wi);
+    prd->pdf.bxdf = 0.0f;
+    prd->lastHitMaterialType = MATERIAL_TYPE_GLASS;
+    return make_float3(1.0f);
 }

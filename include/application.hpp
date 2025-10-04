@@ -34,10 +34,10 @@ public:
     Application(
         const std::string &title,
         const Camera camera,
-        const Model* model,
+        std::vector<const Model*> models,
         const std::string &envMapFileName,
         const float worldScale
-    ) : GLFWCameraWindow(title, camera.from, camera.at, camera.up, worldScale), m_renderer(model)
+    ) : GLFWCameraWindow(title, camera.from, camera.at, camera.up, worldScale), m_renderer(models)
     {
         m_renderer.setCamera(camera);
         m_renderer.setEnvMap(envMapFileName);
@@ -184,6 +184,15 @@ public:
 
             }  
             ImGui::Text("Tonemap:");
+            float white = m_renderer.getWhite();
+            float exposure = m_renderer.getExposure();
+            if(ImGui::SliderFloat("Exposure", &exposure, 0.01f, 20.0f)){
+                m_renderer.setExposure(exposure);
+            }
+            if(ImGui::SliderFloat("White", &white, 1.f, 100.0f)){
+                m_renderer.setWhite(white);
+            }
+
             ImGui::Text("Save image:");
             static char text[256] = "filename";
             ImGui::InputText("file name:", text, sizeof(text));

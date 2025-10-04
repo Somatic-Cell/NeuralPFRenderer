@@ -13,17 +13,6 @@
 #include <assert.h>
 #include <string>
 
-#include <DirectXTex.h>
-
-#if defined(_WIN32)
-#include <windows.h>
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#else
-#include <unistd.h>
-#endif
-
 class MeshLoader 
 {
 public:
@@ -54,8 +43,8 @@ bool MeshLoader::load(const std::string &fileName, Model* model)
     int flag = 0;
     flag |= aiProcess_Triangulate;              // 全ての面を三角形メッシュに統一
     flag |= aiProcess_PreTransformVertices;     // ノード階層を無視して，全ての頂点をワールド座標に変換
-    flag |= aiProcess_CalcTangentSpace;         // 接ベクトル，従法線を計算
     // flag |= aiProcess_GenSmoothNormals;         // 法線がない場合，シェーディング用の法線を生成
+    flag |= aiProcess_CalcTangentSpace;         // 接ベクトル，従法線を計算
     flag |= aiProcess_GenUVCoords;              // UV 座標がない場合，自動生成
     flag |= aiProcess_RemoveRedundantMaterials; // 未使用のマテリアルを削除して軽量化
     flag |= aiProcess_OptimizeMeshes;           // 複数のメッシュをまとめて描画効率を改善
@@ -66,6 +55,8 @@ bool MeshLoader::load(const std::string &fileName, Model* model)
         std::cerr << "Assimp Error: " << importer.GetErrorString() << std::endl;
         return false;
     }
+
+    
 
     std::cout << "Detected " << pScene->mNumMeshes << "meshes." << std::endl;
     std::cout << "Detected " << pScene->mNumMaterials << "materials." << std::endl;
@@ -129,14 +120,25 @@ bool MeshLoader::load(const std::string &fileName, Model* model)
             std::cerr << "WARNING: empty vertex buffer in mesh" << std::endl;
             continue;
         }
+        
         for (auto vtx: mesh->vertex){
             model->bounds.extend(vtx);
         }
     }
 
     aiMatrix4x4 rootT = pScene->mRootNode->mTransformation;
-        std::cout << "Root transform: \n";
-        std::cout << rootT.a1 << ", " << rootT.b1 << ", " << rootT.c1 << "\n";
+    std::cout << "Root transform: \n";
+    std::cout << rootT.a1 << ", " << rootT.a2 << ", " << rootT.a3 << "\n";
+    std::cout << rootT.b1 << ", " << rootT.b2 << ", " << rootT.b3 << "\n";
+    std::cout << rootT.c1 << ", " << rootT.c2 << ", " << rootT.c3 << "\n";
+
+    float3 center = model->bounds.getCenter();
+    std::cout << "Bounding box center:" << std::endl;
+    std::cout << center.x << ", " << center.y << ", " << center.z << "\n";
+
+    model->modelMatrix.row0 = make_float4(rootT.a1, rootT.a2, rootT.a3, -center.x);
+    model->modelMatrix.row1 = make_float4(rootT.b1, rootT.b2, rootT.b3, -center.y);
+    model->modelMatrix.row2 = make_float4(rootT.c1, rootT.c2, rootT.c3, -center.z);
 
     pScene = nullptr;
 
@@ -152,9 +154,8 @@ void MeshLoader::parseMesh(TriangleMesh & dstMesh, const aiMesh* pSrcMesh, const
     const Material& material = *materials[materialID];
     
     aiVector3D zero3D(0.0f, 0.0f, 0.0f);
-
     
-    // 頂点データのメモリを確保
+    // 頂点データの記録
     dstMesh.vertex.resize(pSrcMesh->mNumVertices);
     dstMesh.normal.resize(pSrcMesh->mNumVertices);
     dstMesh.tangent.resize(pSrcMesh->mNumVertices);
@@ -167,7 +168,7 @@ void MeshLoader::parseMesh(TriangleMesh & dstMesh, const aiMesh* pSrcMesh, const
     {
         auto pPosition  = &(pSrcMesh->mVertices[i]);
 
-        auto pNormal    = &(pSrcMesh->mNormals[i]);
+        auto pNormal    = (pSrcMesh->HasNormals()) ? &(pSrcMesh->mNormals[i]) : &zero3D;
         float3 normal = make_float3(pNormal->x, pNormal->y, pNormal->z);
         auto pBiTangent = (pSrcMesh->HasTangentsAndBitangents()) ? &(pSrcMesh->mBitangents[i]) : &zero3D;
         float3 biTangent = make_float3(pBiTangent->x, pBiTangent->y, pBiTangent->z);
@@ -175,9 +176,9 @@ void MeshLoader::parseMesh(TriangleMesh & dstMesh, const aiMesh* pSrcMesh, const
         float3 tangent = make_float3(pTangent->x, pTangent->y, pTangent->z);
         float tanW = (dot(cross(normal, tangent), biTangent) < 0.0f) ? -1.0f : 1.0f;
 
-        const aiVector3D* pDiffuseTexCoord   = (pSrcMesh->HasTextureCoords(material.diffuseUVIndex ))    ? &(pSrcMesh->mTextureCoords[material.diffuseUVIndex ][i])   : &zero3D;
-        const aiVector3D* pNormalTexCoord    = (pSrcMesh->HasTextureCoords(material.normalUVIndex  ))    ? &(pSrcMesh->mTextureCoords[material.normalUVIndex  ][i])    : &zero3D;
-        const aiVector3D* pEmissiveTexCoord  = (pSrcMesh->HasTextureCoords(material.emissiveUVIndex))    ? &(pSrcMesh->mTextureCoords[material.emissiveUVIndex][i])  : &zero3D;
+        const aiVector3D* pDiffuseTexCoord   = (pSrcMesh->HasTextureCoords(material.diffuseUVIndex ))    ? &(pSrcMesh->mTextureCoords[material.diffuseUVIndex ][i]) : &zero3D;
+        const aiVector3D* pNormalTexCoord    = (pSrcMesh->HasTextureCoords(material.normalUVIndex  ))    ? &(pSrcMesh->mTextureCoords[material.normalUVIndex  ][i]) : &zero3D;
+        const aiVector3D* pEmissiveTexCoord  = (pSrcMesh->HasTextureCoords(material.emissiveUVIndex))    ? &(pSrcMesh->mTextureCoords[material.emissiveUVIndex][i]) : &zero3D;
 
         
         dstMesh.vertex[i]   = make_float3(pPosition->x, pPosition->y, pPosition->z);
@@ -185,10 +186,10 @@ void MeshLoader::parseMesh(TriangleMesh & dstMesh, const aiMesh* pSrcMesh, const
         dstMesh.tangent[i]  = make_float4(tangent, tanW);
         dstMesh.diffuseTexcoord[i]  = make_float2(pDiffuseTexCoord->x, pDiffuseTexCoord->y);        
         dstMesh.normalTexcoord[i]   = make_float2(pNormalTexCoord->x, pNormalTexCoord->y);        
-        dstMesh.emissiveTexcoord[i] = make_float2(pEmissiveTexCoord->x, pEmissiveTexCoord->y);        
+        dstMesh.emissiveTexcoord[i] = make_float2(pEmissiveTexCoord->x, pEmissiveTexCoord->y);
     }
 
-    // 頂点インデックスのメモリを確保
+    // 頂点インデックスの記録
     dstMesh.index.resize(pSrcMesh->mNumFaces);
     for(auto i = 0u; i < pSrcMesh->mNumFaces; i++)
     {
@@ -197,11 +198,17 @@ void MeshLoader::parseMesh(TriangleMesh & dstMesh, const aiMesh* pSrcMesh, const
         dstMesh.index[i]   = make_uint3(face.mIndices[0], face.mIndices[1], face.mIndices[2]);
     }
 
+    dstMesh.hasTangentSpace = pSrcMesh->HasTangentsAndBitangents();
+    dstMesh.hasNormal       = pSrcMesh->HasNormals();
+
 }
 
 // Assimp の aiMesh フォーマットをパースし，このレンダラで使用する Mesh フォーマットに変換
 void MeshLoader::parseMaterial(Material& dstMaterial, const aiMaterial* pSrcMaterial, std::vector<Texture*>& textures, const std::string &fbxPath)
 {
+    int shading = 0;
+    pSrcMaterial->Get(AI_MATKEY_SHADING_MODEL, shading);
+
     // Diffuse 成分
     aiColor3D color(0.0f, 0.0f, 0.0f);
 
@@ -243,7 +250,7 @@ void MeshLoader::parseMaterial(Material& dstMaterial, const aiMaterial* pSrcMate
     pSrcMaterial->Get(AI_MATKEY_NAME, materialName);
     std::string nameStr(materialName.C_Str());
 
-    if((nameStr.find("Glass") != std::string::npos || nameStr.find("glass") != std::string::npos))
+    if((nameStr.find("Glass") != std::string::npos) || (nameStr.find("glass") != std::string::npos) || (shading == aiShadingMode_Fresnel))
     {
         std::cout << "This material may be glass:" << nameStr <<"Raised a glass flag" << std::endl;
         dstMaterial.isGlass = true;
@@ -265,6 +272,7 @@ void MeshLoader::parseMaterial(Material& dstMaterial, const aiMaterial* pSrcMate
     // テクスチャ
     // Diffuse (or Base Color) texture
     {
+        static thread_local ComInit com;
         aiString path;
         unsigned int uvIndex = 0;
 
@@ -457,7 +465,7 @@ void MeshLoader::parseMaterial(Material& dstMaterial, const aiMaterial* pSrcMate
 
 }                    
 
-Model *loadFBX(const std::string &fbxFileName){
+Model *loadModel(const std::string &modelFileName){
     Model *model = new Model;
     MeshLoader loader;
 
@@ -475,7 +483,7 @@ Model *loadFBX(const std::string &fbxFileName){
     }
 #endif
 
-    std::filesystem::path fbxDir = exePath.parent_path().parent_path().parent_path().parent_path() / "model" / fbxFileName;
+    std::filesystem::path fbxDir = exePath.parent_path().parent_path().parent_path().parent_path() / "model" / modelFileName;
     std::cout << "Model Path:" << fbxDir << std::endl;
 
     std::string err = "";

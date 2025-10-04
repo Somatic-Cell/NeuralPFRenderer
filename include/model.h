@@ -6,6 +6,19 @@
 #include <cuda_runtime.h>
 #include <box.hpp>
 #include "texture.hpp"
+#include "../utils/my_math.hpp"
+
+#include <DirectXTex.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#else
+#include <unistd.h>
+#endif
+
 
 struct TriangleMesh {
     std::vector<float3> vertex;
@@ -17,6 +30,9 @@ struct TriangleMesh {
     std::vector<uint3>  index;
 
     int     materialID          {-1};
+    bool    hasUVCoord          {false};
+    bool    hasTangentSpace     {false};
+    bool    hasNormal           {false};
 };
 
 
@@ -73,8 +89,15 @@ struct Model {
     std::vector<Material*>      materials;
     std::vector<Texture*>       textures;
     Box3f                       bounds;     // モデル全体を囲う Bounding box
+    mymath::matrix3x4           modelMatrix;
 };
 
-Model *loadFBX(const std::string &fbxFileName);
+Model *loadModel(const std::string &modelFileName);
+
+struct ComInit {
+    HRESULT hr{E_FAIL};
+    ComInit()  { hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED); }
+    ~ComInit() { if (SUCCEEDED(hr)) CoUninitialize(); }
+};
 
 #endif // MODEL_H_

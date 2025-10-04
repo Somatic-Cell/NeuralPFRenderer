@@ -29,5 +29,44 @@ namespace mymath{
     vy = tmpy;
     vz = tmpz;
   }
+
+  struct matrix3x4{
+    float4 row0;
+    float4 row1;
+    float4 row2;
+  };
+  
+  struct matrix3x3{
+    float3 row0;
+    float3 row1;
+    float3 row2;
+  };
+
+  inline __device__ __host__ matrix3x3 linear3x3(const matrix3x4& M){
+    matrix3x3 A;
+
+    A.row0 = make_float3(M.row0.x, M.row0.y, M.row0.z);
+    A.row1 = make_float3(M.row1.x, M.row1.y, M.row1.z);
+    A.row2 = make_float3(M.row2.x, M.row2.y, M.row2.z);
+
+    return A;
+  }
+
+  inline __device__ __host__ float3 mul3x3(const matrix3x3 M, const float3 x){
+    float3 res;
+    res.x = M.row0.x * x.x + M.row0.y * x.y + M.row0.z * x.z;
+    res.y = M.row1.x * x.x + M.row1.y * x.y + M.row1.z * x.z;
+    res.z = M.row2.x * x.x + M.row2.y * x.y + M.row2.z * x.z;
+    return res;
+  }
+
+  inline __device__ __host__ float3 mul3x4(const matrix3x4 M, const float4 x){
+    float3 res;
+    res.x = M.row0.x * x.x + M.row0.y * x.y + M.row0.z * x.z + M.row0.w * x.w;
+    res.y = M.row1.x * x.x + M.row1.y * x.y + M.row1.z * x.z + M.row1.w * x.w;
+    res.z = M.row2.x * x.x + M.row2.y * x.y + M.row2.z * x.z + M.row2.w * x.w;
+    return res;
+  }
+
 }
 #endif // MY_MATH_HPP_

@@ -1,7 +1,7 @@
 #ifndef PER_RAY_DATA_CUH_
 #define PER_RAY_DATA_CUH_
 
-#include "config.cuh"
+#include "../config.cuh"
 #include <optix_device.h>
 
 struct PRD {
@@ -24,9 +24,12 @@ struct PRD {
     int bounce;
     int lastHitMaterialType;
     bool continueTrace;
+
+    uint instanceID;
 };
 
 struct ShadowPRD {
+    Random random;
     bool visible    {false};
 };
 
