@@ -1,8 +1,9 @@
 /build
 /model/*
-!/model/CornellBox/*
+!/model/CornellBox
 /envmap/*
 !/envmap/symmetrical_garden_4k.hdr
+/scene/*
 result.log
 imgui.ini
 *.jpg
