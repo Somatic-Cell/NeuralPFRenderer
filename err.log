@@ -1,30 +1,32 @@
-Diffuse Texture of textures\sponza_thorn_diff.png uses 0 th texture
-Diffuse Texture of textures\vase_round.png uses 0 th texture
-Diffuse Texture of textures\vase_plant.png uses 0 th texture
-Diffuse Texture of textures\background.png uses 0 th texture
-Diffuse Texture of textures\spnza_bricks_a_diff.png uses 0 th texture
-textures\spnza_bricks_a_spec.png
-Diffuse Texture of textures\sponza_arch_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_ceiling_a_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_column_a_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_floor_a_diff.png uses 0 th texture
-textures\floor_gloss.png
-Diffuse Texture of textures\sponza_column_c_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_details_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_column_b_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_flagpole_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_fabric_green_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_fabric_blue_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_fabric_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_curtain_blue_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_curtain_diff.png uses 0 th texture
-Diffuse Texture of textures\sponza_curtain_green_diff.png uses 0 th texture
-Diffuse Texture of textures\chain_texture.png uses 0 th texture
-Diffuse Texture of textures\vase_hanging.png uses 0 th texture
-textures\vase_hanging.png
-Diffuse Texture of textures\vase_dif.png uses 0 th texture
-Diffuse Texture of textures\lion.png uses 0 th texture
-Diffuse Texture of textures\sponza_roof_diff.png uses 0 th texture
+Diffuse Texture of textures\stone_trims_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\arch_stone_wall_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\brickwall_02_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\metal_door_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\ceiling_plaster_02_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\stones_2ndfloor_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\stone_trims_02_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\stone_01_tile_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\window_frame_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\col_1stfloor_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\col_head_1stfloor_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\door_stoneframe_02_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\door_stoneframe_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\brickwall_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\wood_door_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\wood_tile_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\floor_tiles_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\lionhead_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\dirt_decal_01.png uses 0 th texture
+Diffuse Texture of textures\col_head_2ndfloor_02_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\col_brickwall_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\col_head_2ndfloor_03_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\ceiling_plaster_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\roof_tiles_01_BaseColor.png uses 0 th texture
+Diffuse Texture of textures\ornament_01_BaseColor.png uses 0 th texture
+Diffuse Texture of ./textures/metal_door_01_BaseColor.png uses 0 th texture
+Diffuse Texture of ./textures/curtain_fabric_red_BaseColor.png uses 0 th texture
+Diffuse Texture of ./textures/curtain_fabric_blue_BaseColor.png uses 0 th texture
+Diffuse Texture of ./textures/curtain_fabric_green_BaseColor.png uses 0 th texture
 [ 4][   DISKCACHE]: Cache hit for key: ptx-16668-key18766a70ad3ff03e81f25c8afbac33ba-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
@@ -34,7 +36,7 @@ Diffuse Texture of textures\sponza_roof_diff.png uses 0 th texture
 [ 4][   DISKCACHE]: Cache hit for key: ptx-7404-key4aa43e99a2dd3b85fbc54b49b9c0f1ee-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
-[ 4][   DISKCACHE]: Cache hit for key: ptx-32364-key58a7a405b2d47c765348d2b7283c392c-sm_86-rtc1-drv581.42
+[ 4][   DISKCACHE]: Cache hit for key: ptx-32360-key7ef7c66e0d8d0998f9453d6161db02e6-sm_86-rtc1-drv581.42
 
 [ 4][    COMPILER]: 
 [ 4][   DISKCACHE]: Cache hit for key: ptx-3248-keyac074696717a083568b3c487bda99719-sm_86-rtc1-drv581.42

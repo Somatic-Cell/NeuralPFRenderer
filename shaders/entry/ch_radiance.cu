@@ -35,7 +35,10 @@ extern "C" __global__ void __closesthit__radiance()
     const float3 v1 = mymath::mul3x4(matrixO2WPoint, make_float4(V1, 1.0f));
     const float3 v2 = mymath::mul3x4(matrixO2WPoint, make_float4(V2, 1.0f));
     const float3 v3 = mymath::mul3x4(matrixO2WPoint, make_float4(V3, 1.0f));
+    
     float3 Ng = normalize(cross(v2-v1, v3-v1));
+    const float triangleArea = 0.5f * fmaxf(length(cross(v2 - v1, v3 - v1)), 1e-7f);
+
 
 
     // Diffuse テクスチャ座標を取得
@@ -157,10 +160,9 @@ extern "C" __global__ void __closesthit__radiance()
 
             if(prd.bounce != 0)
             {
-                const float areaThisTriangle = 0.5f * fmaxf(length(cross(v2 - v1, v3 - v1)), 1e-7f);
                 const float r = rayLength;
                 const float pSelect = 1.0f / float(optixLaunchParams.light.numLights);
-                float pArea = 1.0f / (areaThisTriangle);
+                float pArea = 1.0f / (triangleArea);
                 // const float geometricTerm = cosTheta / (rayLength * rayLength);
                 const float pdfLight =  pSelect * pArea * (r * r) / cosTheta;
                 

@@ -50,6 +50,20 @@ struct Camera {
     float fov           {50.f};      // degrees
     float pintDist      {1.0f};
     float sensitivity   {1.0f};
+
+    void setExtrinsics(const float3 _from, const float3 _at, const float3 _up){
+        from = _from;
+        at = _at;
+        up = _up;
+    }
+
+    void setIntrinsics(const float _focalLength, const float _fValue, const float _fov, const float _pintDist, const float _sensitivity){
+        focalLength = _focalLength;
+        fValue = _fValue;
+        fov = _fov;
+        pintDist = _pintDist;
+        sensitivity = _sensitivity;
+    }
 };
 
 

@@ -1,1 +1,1 @@
-build\bin\Release\PhotonicRT.exe 2>err.log
+build\bin\Release\PhotonicRT.exe "newSponza.json" 2>err.log

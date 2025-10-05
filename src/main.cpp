@@ -9,7 +9,7 @@
 #include <assert.h>
 #include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
+#include "sceneDescIO.hpp"
 
 #include "application.hpp"
 
@@ -18,47 +18,55 @@
 extern "C" int main(int ac, char **av)
   {
 
-    // FBX ファイルの読み込み
-    std::vector<std::string> modelFileNames;
+    // 引数から Json ファイルのパスを決定
+    std::filesystem::path jsonPath = (ac > 1) ? std::filesystem::path(av[1]) : std::filesystem::path("scene.json");
+    std::filesystem::path jsonAbsPath = sceneIO::getJsonAbsPath(jsonPath);
+    std::cout << "[Scene] using: " << jsonAbsPath.u8string() << std::endl;
 
-    // modelFileNames.push_back("Bistro_V5_2\\BistroExterior.fbx");
-    // modelFileNames.push_back("Bistro_v5_2\\BistroInterior.fbx");
-    // modelFileNames.push_back("EmeraldSquare_v4_1\\EmeraldSquare_Dusk.fbx");
-    // modelFileNames.push_back("EmeraldSquare_v4_1\\EmeraldSquare_Day.fbx");
-    modelFileNames.push_back("sponza\\sponza.obj");
-    // modelFileNames.push_back("tokyo\\53394525_bldg_6677.fbx");
-    // modelFileNames.push_back("main_sponza\\NewSponza_Main_Yup_003.fbx");
-    // modelFileNames.push_back("pkg_a_curtains\\NewSponza_Curtains_FBX_YUp.fbx");
-    // modelFileNames.push_back("CornellBox\\CornellBox-Original.obj");
-    // modelFileNames.push_back("CornellBox\\water.obj");
-
-    // const std::string envMapFileName("san_giuseppe_bridge_4k.hdr");
-    // const std::string envMapFileName("night_sky.hdr");
-    const std::string envMapFileName("symmetrical_garden_4k.hdr");
-
+    // Json ファイルを読み込む
+    sceneIO::Scene sceneDesc;
+    std::string jerr;
+    if(!sceneIO::loadOrCreate(jsonAbsPath, sceneDesc, &jerr)) {
+      std::cerr << "FATAL: scene load failed: " << jerr << std::endl;
+      return 1;
+    }
+    if(!jerr.empty()){
+      std::cerr << "[Scene] : note: " << jerr << std::endl;
+    }
+    
+  
     try {
 
-        std::vector<const Model*> models;
-        models.reserve(modelFileNames.size());
-        for(const auto& path : modelFileNames){
-            std::cout << "Model File Name:" << path << std::endl;
-            if(auto* m = loadModel(path)){
-              models.push_back(m);
-            }
-        }
+      // モデルファイルの読み込み
+      std::vector<std::string> modelFileNames;
+      std::vector<const Model*> models;
+      models.reserve(sceneDesc.objects.size());
+      for(const auto& obj : sceneDesc.objects){
+          std::cout << "Model File Name:" << obj.file << std::endl;
+          
+          if(auto* m = loadModel(obj.file)){
+            models.push_back(m);
+          }else {
+            std::cerr << "WARNING: failed to load model: " << obj.file << std::endl;
+          }
+      }
+      if(models.empty()) {
+        throw std::runtime_error("no model loaded");
+      }
 
-        
+      // 環境マップの指定
+      std::string envMapFileName;
+      if(!sceneDesc.environment.file.empty()){
+        envMapFileName = sceneDesc.environment.file;
+      } else {
+        envMapFileName = "symmetrical_garden_4k.hdr";
+      }
 
-        
-        Camera camera;
+      Application *application = new Application("Photonic RT", sceneDesc, models);
 
-        const float worldScale = length(models[0]->bounds.getSpan()); // MEMO : 後で修正
-
-        Application *application = new Application("Photonic RT", camera, models, envMapFileName, worldScale);
-
-        application->enableFlyMode();
-        application->run();
-      
+      application->enableFlyMode();
+      application->run();
+    
     } catch (std::runtime_error& e) {
       std::cout << "FATAL ERROR: " << e.what() << std::endl;
       exit(1);

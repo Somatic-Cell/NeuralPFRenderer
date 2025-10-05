@@ -136,9 +136,9 @@ bool MeshLoader::load(const std::string &fileName, Model* model)
     std::cout << "Bounding box center:" << std::endl;
     std::cout << center.x << ", " << center.y << ", " << center.z << "\n";
 
-    model->modelMatrix.row0 = make_float4(rootT.a1, rootT.a2, rootT.a3, -center.x);
-    model->modelMatrix.row1 = make_float4(rootT.b1, rootT.b2, rootT.b3, -center.y);
-    model->modelMatrix.row2 = make_float4(rootT.c1, rootT.c2, rootT.c3, -center.z);
+    model->modelMatrix.row0 = make_float4(rootT.a1, rootT.a2, rootT.a3, rootT.a4);
+    model->modelMatrix.row1 = make_float4(rootT.b1, rootT.b2, rootT.b3, rootT.a4);
+    model->modelMatrix.row2 = make_float4(rootT.c1, rootT.c2, rootT.c3, rootT.a4);
 
     pScene = nullptr;
 

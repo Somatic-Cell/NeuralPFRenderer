@@ -5,6 +5,7 @@
 #include "renderer.hpp"
 #include "glfw_window.hpp"
 #include "ptx_data_reader.hpp"
+#include "sceneDescIO.hpp"
 #include <gl/GL.h>
 
 // #if defined(_WIN32)
@@ -33,14 +34,35 @@ class Application : public GLFWCameraWindow
 public:
     Application(
         const std::string &title,
-        const Camera camera,
-        std::vector<const Model*> models,
-        const std::string &envMapFileName,
-        const float worldScale
-    ) : GLFWCameraWindow(title, camera.from, camera.at, camera.up, worldScale), m_renderer(models)
+        const sceneIO::Scene scene,
+        std::vector<const Model*> models
+    ) 
+    : GLFWCameraWindow(
+        title, 
+        make_float3(scene.camera.from[0], scene.camera.from[1], scene.camera.from[2]), 
+        make_float3(scene.camera.at[0], scene.camera.at[1], scene.camera.at[2]), 
+        make_float3(scene.camera.up[0], scene.camera.up[1], scene.camera.up[2]),
+        length(models[0]->bounds.getSpan())
+    ), m_renderer(models)
     {
+        Camera camera;
+      
+        camera.setExtrinsics(
+            make_float3(scene.camera.from[0], scene.camera.from[1], scene.camera.from[2]),
+            make_float3(scene.camera.at[0], scene.camera.at[1], scene.camera.at[2]),
+            make_float3(scene.camera.up[0], scene.camera.up[1], scene.camera.up[2])
+        );
+
+        camera.setIntrinsics(
+            scene.camera.focalLength,
+            scene.camera.fValue,
+            scene.camera.fov,
+            scene.camera.pintDist,
+            scene.camera.sensitivity
+        );
+
         m_renderer.setCamera(camera);
-        m_renderer.setEnvMap(envMapFileName);
+        m_renderer.setEnvMap(scene.environment.file);
 
 
         // 結果を描画するテクスチャの作成
