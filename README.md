@@ -1,6 +1,6 @@
-# PhotonicRT v.0.1
+# AtmosphericRT v.0.1
 
-フォトニック結晶をレイトレーシングするためのレンダラ．\
+大気をレイトレーシングするためのレンダラ．\
 NVIDIA CUDA / OptiX を使用．
 
 - [依存関係](#依存関係)
@@ -48,7 +48,7 @@ $ vcpkg install tbb blosc openexr zlib boost-iostreams
 コマンドプロンプトなどを開き，作業したいディレクトリ上で，本リポジトリをローカル環境にクローンする：
 
 ```
-$ git clone --recursive https://github.com/Somatic-Cell/PhotonicRT.git 
+$ git clone --recursive https://github.com/Somatic-Cell/AtmosphericRT.git 
 ```
 【注意】 サブモジュールを含めてクローンするために，```--recursive``` オプションを指定． \
 これを指定すれば，[使用する外部ライブラリ](#使用する外部ライブラリ) を個別にダウンロードする必要がない．

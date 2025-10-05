@@ -6,7 +6,7 @@
 ### JP: CMake のバージョン
 cmake_minimum_required(VERSION 3.18)
 
-set(PROJECT_NAME "PhotonicRT")
+set(PROJECT_NAME "AtmosphericRT")
 set(TARGET_NAME ${PROJECT_NAME})
 
 project(${PROJECT_NAME}

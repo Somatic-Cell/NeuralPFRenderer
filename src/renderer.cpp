@@ -89,43 +89,43 @@ Renderer::Renderer(std::vector<const Model*> models) : m_models(models)
 
     initOptix();
     
-    std::cout << "# Photonic RT: creating OptiX context..." << std::endl;
+    std::cout << "# Atmospheric RT: creating OptiX context..." << std::endl;
     createContext();
 
-    std::cout << "# Photonic RT: setting up OptiX module..." << std::endl;
+    std::cout << "# Atmospheric RT: setting up OptiX module..." << std::endl;
     createOptiXModule();
 
-    std::cout << "# Photonic RT: creating raygen programs ..." << std::endl;
+    std::cout << "# Atmospheric RT: creating raygen programs ..." << std::endl;
     createRaygenPrograms();
-    std::cout << "# Photonic RT: creating miss programs ..." << std::endl;
+    std::cout << "# Atmospheric RT: creating miss programs ..." << std::endl;
     createMissPrograms();
-    std::cout << "# Photonic RT: creating callable programs ..." << std::endl;
+    std::cout << "# Atmospheric RT: creating callable programs ..." << std::endl;
     createCallablePrograms();
-    std::cout << "# Photonic RT: creating hitgroup programs ..." << std::endl;
+    std::cout << "# Atmospheric RT: creating hitgroup programs ..." << std::endl;
     createHitgroupPrograms();
 
     buildAccel();
     m_launchParams.traversable = m_iasHandle;
 
-    std::cout << "# Photonic RT: setting up OptiX pipeline ..." << std::endl;
+    std::cout << "# Atmospheric RT: setting up OptiX pipeline ..." << std::endl;
     createPipeline();
     
     createTextures();
 
-    std::cout << "# Photonic RT: building shader binding table..." << std::endl;
+    std::cout << "# Atmospheric RT: building shader binding table..." << std::endl;
     buildSBT();
 
     m_launchParamsBuffer.alloc(sizeof(m_launchParams)); // alloc だけ？
-    std::cout << "# Photonic RT: context, module, pipeline, etc, all set up ..." << std::endl;
-    std::cout << "# Photonic RT: Optix 8 fully set up..." << std::endl;
+    std::cout << "# Atmospheric RT: context, module, pipeline, etc, all set up ..." << std::endl;
+    std::cout << "# Atmospheric RT: Optix 8 fully set up..." << std::endl;
 
     
-    std::cout << "# Photonic RT: setting up CUDA module..." << std::endl;
+    std::cout << "# Atmospheric RT: setting up CUDA module..." << std::endl;
     createCUDAModule();
 
-    std::cout << "# Photonic RT: create light table..." << std::endl;
+    std::cout << "# Atmospheric RT: create light table..." << std::endl;
     createLightTable();
-    std::cout << "# Photonic RT: CUDA kernel fully set up..." << std::endl;
+    std::cout << "# Atmospheric RT: CUDA kernel fully set up..." << std::endl;
 }
 
 

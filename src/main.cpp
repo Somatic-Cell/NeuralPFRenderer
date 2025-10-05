@@ -62,7 +62,7 @@ extern "C" int main(int ac, char **av)
         envMapFileName = "symmetrical_garden_4k.hdr";
       }
 
-      Application *application = new Application("Photonic RT", sceneDesc, models);
+      Application *application = new Application("Atmospheric RT", sceneDesc, models);
 
       application->enableFlyMode();
       application->run();
