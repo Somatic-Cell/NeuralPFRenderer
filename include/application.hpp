@@ -43,7 +43,7 @@ public:
         make_float3(scene.camera.at[0], scene.camera.at[1], scene.camera.at[2]), 
         make_float3(scene.camera.up[0], scene.camera.up[1], scene.camera.up[2]),
         length(models[0]->bounds.getSpan())
-    ), m_renderer(models)
+    ), m_renderer(models, scene)
     {
         Camera camera;
       

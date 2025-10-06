@@ -8,6 +8,7 @@
 #include "cuda_buffer.h"
 #include "model.h"
 #include "launch_params.h"
+#include "sceneDescIO.hpp"
 #include <cuda_runtime.h>
 
 enum class OptixModuleIdentifier{
@@ -66,11 +67,16 @@ struct Camera {
     }
 };
 
+struct SpectrumData{
+    float lambdaMin;
+    float lambdaMax;
+    std::array<std::vector<float>, 3> data;
+};
 
 class Renderer 
 {
 public:
-    Renderer(std::vector<const Model*> models);
+    Renderer(std::vector<const Model*> models, sceneIO::Scene sceneDesc);
 
     void render();
     void resize(const int2 & newSize);
@@ -91,6 +97,8 @@ public:
     void setExposure(const float exposure);
     float getExposure() const;
 
+    
+
 protected:
     void computeFinalPixelColors();
     void initOptix();
@@ -109,6 +117,10 @@ protected:
     void createCUDAModule();
 
     void createLightTable();
+
+    // Spectral rendering 用
+    void uploadSpectrumData();
+    SpectrumData loadSpectrumDataFromCSV(const std::string path);
 
     CUcontext           m_cudaContext;
     CUstream            m_stream;
@@ -206,7 +218,20 @@ protected:
 
     float m_exposure    {0.5f};
     float m_white       {5.0f};
+
+    sceneIO::Scene m_sceneDesc;
+
+    // for spectral rendering
+    SpectrumData    m_xyz;
+    SpectrumData    m_rgbUpSamplingBasis;
+
+    // XYZ 等色関数
+    std::vector<cudaArray_t>            m_xyzFuncArrays;    // 関数の実体が入ったデータのベクトル
+    std::vector<cudaTextureObject_t>    m_xyzFuncObjects;   // 関数にアクセスするためのハンドル
     
+    // RGB テクスチャのアップサンプリング用の関数
+    std::vector<cudaArray_t>            m_rgbUpSampleFuncArrays;    // 関数の実体が入ったデータのベクトル
+    std::vector<cudaTextureObject_t>    m_rgbUpSampleFuncObjects;   // 関数にアクセスするためのハンドル
 };
 
 

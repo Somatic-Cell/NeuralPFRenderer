@@ -36,6 +36,9 @@ namespace sceneIO {
         std::string type = "mesh";
         std::string file = "CornellBox\\CornellBox-Original.obj";
         Transform TRS{};
+        bool placeCenterBBoxAtOrigin = true;
+        bool placeOnGround = true;
+        bool normalizeScale = true;
     };
 
     struct Integrator {
@@ -63,11 +66,18 @@ namespace sceneIO {
         float sensitivity   {1.0f};
     };
 
+    struct Spectrum {
+        std::string xyzFuncFile = "xyzbar_from_lms.csv";
+        std::string upSampleBasisFile = "basis_rgb.csv";
+    };
+
     struct Scene {
         std::vector<Object>     objects         {Object{}};
         Camera                  camera          {};
         Environment             environment     {};
         Integrator              integrator      {};
+        Spectrum                spectrum        {};
+        bool                    enableGroundRendering {true};
     };
 
     // Environment
@@ -98,18 +108,22 @@ namespace sceneIO {
 
     // Object
     inline void from_json(const nlohmann::ordered_json& j, Object& v){
-        v.name      = j.value("name", v.name);
-        v.type      = j.value("type", v.type);
-        v.file      = j.value("file", v.file);
-        v.TRS       = j.value("TRS", v.TRS);
+        v.name                      = j.value("name", v.name);
+        v.type                      = j.value("type", v.type);
+        v.file                      = j.value("file", v.file);
+        v.TRS                       = j.value("TRS", v.TRS);
+        v.placeCenterBBoxAtOrigin   = j.value("placeCenterBBoxAtOrigin", v.placeCenterBBoxAtOrigin);
+        v.placeOnGround             = j.value("placeOnGround", v.placeOnGround);
     }
 
     inline void to_json(nlohmann::ordered_json& j, const Object& v){
         j = {
-            {"name",        v.name},
-            {"type",        v.type},
-            {"file",        v.file},
-            {"TRS",         v.TRS}
+            {"name",                    v.name},
+            {"type",                    v.type},
+            {"file",                    v.file},
+            {"TRS",                     v.TRS},
+            {"placeCenterBBoxAtOrigin", v.placeCenterBBoxAtOrigin},
+            {"placeOnGround",           v.placeOnGround},
         };
     }
 
@@ -118,7 +132,7 @@ namespace sceneIO {
         v.type                      = j.value("type", v.type);
         v.applySpectralRendering    = j.value("applySpectralRendering", v.applySpectralRendering);
         v.spp                       = j.value("spp", v.spp);
-        v.type                      = j.value("type", v.type);
+        v.maxBounce                 = j.value("maxBounce", v.maxBounce);
     }
 
     inline void to_json(nlohmann::ordered_json& j, const Integrator& v){
@@ -126,7 +140,7 @@ namespace sceneIO {
             {"type", v.type},
             {"applySpectralRendering", v.applySpectralRendering},
             {"spp", v.spp},
-            {"type", v.type}
+            {"maxBounce", v.maxBounce}
         };
     }
 
@@ -167,11 +181,28 @@ namespace sceneIO {
         };
     }
 
+    // Spectrum
+    inline void from_json(const nlohmann::ordered_json& j, Spectrum& v){
+        v.upSampleBasisFile = j.value("upSampleBasisFile", v.upSampleBasisFile);
+        v.xyzFuncFile       = j.value("xyzFuncFile", v.xyzFuncFile);
+    }
+
+    inline void to_json(nlohmann::ordered_json& j, const Spectrum& v){
+        j = {
+            {"upSampleBasisFile", v.upSampleBasisFile},
+            {"xyzFuncFile", v.xyzFuncFile},
+        };
+    }
+
+
+
     inline void from_json(const nlohmann::ordered_json& j, Scene& v){
         if(j.contains("objects"))       v.objects       = j["objects"].get<std::vector<Object>>();
         if(j.contains("camera"))        v.camera        = j["camera"].get<Camera>();
         if(j.contains("environment"))   v.environment   = j["environment"].get<Environment>();
         if(j.contains("integrator"))    v.integrator    = j["integrator"].get<Integrator>();
+        if(j.contains("spectrum"))      v.spectrum      = j["spectrum"].get<Spectrum>();
+        v.enableGroundRendering                         = j.value("enableGroundRendering", v.enableGroundRendering);
     }
 
     inline void to_json(nlohmann::ordered_json& j, const Scene& v) 
@@ -180,7 +211,9 @@ namespace sceneIO {
             {"objects", v.objects},
             {"camera",  v.camera},
             {"environment", v.environment},
-            {"integrator", v.integrator}
+            {"integrator", v.integrator},
+            {"spectrum", v.spectrum},
+            {"enableGroundRendering", v.enableGroundRendering}
         };
     }
 

@@ -8,10 +8,42 @@
 #include "../../include/launch_params.h"
 #include <stdio.h>
 
-extern "C" __global__ void __anyhit__radiance()
+extern "C" __global__ void __anyhit__radiance_rgb()
 {
     const TriangleMeshSBTData &sbtData =*(const TriangleMeshSBTData*) optixGetSbtDataPointer();
-    PRD &prd = *getPRD<PRD>();
+    PRDRGB &prd = *getPRD<PRDRGB>();
+    
+    float opacity = 1.0f;     
+    if(sbtData.diffuseTexture.hasTexture){
+        // 基本的な交差点の情報を取得
+        const int primID = optixGetPrimitiveIndex();
+        const uint3 index = sbtData.index[primID];
+        const float u = optixGetTriangleBarycentrics().x;
+        const float v = optixGetTriangleBarycentrics().y;
+
+        // Diffuse テクスチャ座標を取得
+        const float2 &UVDiffuse1 = sbtData.diffuseTexcoord[index.x];
+        const float2 &UVDiffuse2 = sbtData.diffuseTexcoord[index.y];
+        const float2 &UVDiffuse3 = sbtData.diffuseTexcoord[index.z];
+
+        const float2 diffuseTextureCoordinate = (1.0f - u - v) * UVDiffuse1
+            + u * UVDiffuse2
+            + v * UVDiffuse3;
+
+        opacity = tex2D<float4>(sbtData.diffuseTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y).w;
+    }
+
+    if(opacity < 1.0f && opacity <= prd.random()){
+        optixIgnoreIntersection();
+        return;
+    }
+}
+
+
+extern "C" __global__ void __anyhit__radiance_spectral()
+{
+    const TriangleMeshSBTData &sbtData =*(const TriangleMeshSBTData*) optixGetSbtDataPointer();
+    PRDSpectral &prd = *getPRD<PRDSpectral>();
     
     float opacity = 1.0f;     
     if(sbtData.diffuseTexture.hasTexture){

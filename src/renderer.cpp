@@ -51,7 +51,7 @@ struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) HitgroupRecord
 };
 
 
-Renderer::Renderer(std::vector<const Model*> models) : m_models(models)
+Renderer::Renderer(std::vector<const Model*> models, sceneIO::Scene sceneDesc) : m_models(models), m_sceneDesc(sceneDesc)
 {
     m_optixModuleFileNames.resize(static_cast<int>(OptixModuleIdentifier::NUM_OPTIX_MODULE_IDENTIFIERS));
 #if defined(USE_OPTIX_IR)
@@ -125,6 +125,10 @@ Renderer::Renderer(std::vector<const Model*> models) : m_models(models)
 
     std::cout << "# Atmospheric RT: create light table..." << std::endl;
     createLightTable();
+
+    std::cout << "# Atmospheric RT: uploading spectrum data..." << std::endl;
+    uploadSpectrumData();
+
     std::cout << "# Atmospheric RT: CUDA kernel fully set up..." << std::endl;
 }
 
@@ -637,7 +641,11 @@ void Renderer::createRaygenPrograms()
     OptixProgramGroupDesc       pgDesc      = {};
     pgDesc.kind                             = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     pgDesc.raygen.module                    = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_RAYGEN)];
-    pgDesc.raygen.entryFunctionName         = "__raygen__renderFrame";
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgDesc.raygen.entryFunctionName         = "__raygen__renderFrame_spectral";
+    } else {
+        pgDesc.raygen.entryFunctionName         = "__raygen__renderFrame_rgb";
+    }
 
     // m_raygenPrograms に 登録
     char log[2048];
@@ -666,7 +674,11 @@ void Renderer::createMissPrograms()
     size_t sizeOfLog = sizeof(log);
     
     // m_missPrograms に radiance ray を登録
-    pgDesc.miss.entryFunctionName = "__miss__radiance";
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgDesc.miss.entryFunctionName = "__miss__radiance_spectral";
+    } else {
+        pgDesc.miss.entryFunctionName = "__miss__radiance_rgb";
+    }
 
     OPTIX_CHECK(optixProgramGroupCreate(m_optixContext,
                                         &pgDesc,
@@ -708,9 +720,13 @@ void Renderer::createHitgroupPrograms()
     size_t sizeOfLog = sizeof(log);
     
     // radiance ray の登録
-    pgDesc.hitgroup.entryFunctionNameCH = "__closesthit__radiance";
-    pgDesc.hitgroup.entryFunctionNameAH = "__anyhit__radiance";
-
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgDesc.hitgroup.entryFunctionNameCH = "__closesthit__radiance_spectral";
+        pgDesc.hitgroup.entryFunctionNameAH = "__anyhit__radiance_spectral";
+    } else {
+        pgDesc.hitgroup.entryFunctionNameCH = "__closesthit__radiance_rgb";
+        pgDesc.hitgroup.entryFunctionNameAH = "__anyhit__radiance_rgb";
+    }
     OPTIX_CHECK(optixProgramGroupCreate(m_optixContext,
                                         &pgDesc,
                                         1,
@@ -771,40 +787,59 @@ void Renderer::createCallablePrograms()
     pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_DIFFUSE)];
-    pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_diffuse_sample";
-
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_diffuse_sample_spectral";
+    } else {
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_diffuse_sample_rgb";
+    }
+    
     pgd = &pgDesc[offset + BXDF_TYPE_DIFFUSE_EVAL];
     pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_DIFFUSE)];
-    pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_diffuse_eval";
-
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_diffuse_eval_spectral";
+    } else {
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_diffuse_eval_rgb";
+    }
     // Disney principled
     pgd = &pgDesc[offset + BXDF_TYPE_PRINCIPLED_SAMPLE];
     pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_PRINCIPLED)];
-    pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_principled_sample";
-
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_principled_sample_spectral";
+    } else {
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_principled_sample_rgb";
+    }
     pgd = &pgDesc[offset + BXDF_TYPE_PRINCIPLED_EVAL];
     pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_PRINCIPLED)];
-    pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_principled_eval";
-
+    if(m_sceneDesc.integrator.applySpectralRendering){
+    pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_principled_eval_spectral";
+    } else {
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__brdf_principled_eval_rgb";
+    }
     // Glass
     pgd = &pgDesc[offset + BXDF_TYPE_GLASS_SAMPLE];
     pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_GLASS)];
-    pgd->callables.entryFunctionNameDC    = "__direct_callable__bsdf_glass_sample";
-
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__bsdf_glass_sample_spectral";
+    } else {
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__bsdf_glass_sample_rgb";
+    }
     pgd = &pgDesc[offset + BXDF_TYPE_GLASS_EVAL];
     pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_GLASS)];
-    pgd->callables.entryFunctionNameDC    = "__direct_callable__bsdf_glass_eval";
-
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__bsdf_glass_eval_spectral";
+    } else {
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__bsdf_glass_eval_rgb";
+    }
     // ライトサンプリング
     offset = NUM_LENS_TYPE + NUM_BXDF; 
     
@@ -813,15 +848,21 @@ void Renderer::createCallablePrograms()
     pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)];
-    pgd->callables.entryFunctionNameDC    = "__direct_callable__light_env_sphere_is";
-
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__light_env_sphere_is_spectral";
+    } else {
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__light_env_sphere_is_rgb";
+    }
     // メッシュ
     pgd = &pgDesc[offset + LIGHT_TYPE_TRIANGLE];
     pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)];
-    pgd->callables.entryFunctionNameDC    = "__direct_callable__light_triangle";
-
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__light_triangle_spectral";
+    } else {
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__light_triangle_rgb";
+    }
     
     // 登録
     for(int callableID = 0; callableID < numCallablePrograms; callableID++){
@@ -1476,3 +1517,138 @@ void Renderer::setExposure(const float exposure){
 float Renderer::getExposure() const{
     return m_exposure;
 }
+
+void Renderer::uploadSpectrumData()
+{
+    std::filesystem::path exePath;
+    char pathBuffer[MAX_PATH] = {};
+#if defined(_WIN32)
+    if(GetModuleFileNameA(NULL, pathBuffer, MAX_PATH) == 0){
+        std::cerr << "ERROR: GetModuleFileNameA failed" << std::endl;
+    }
+    exePath = std::filesystem::path(pathBuffer);
+#else
+    ssize_t count = readlink("/proc/self/exe", exePath, PATH_MAX);
+    if(count == -1) {
+        std::cerr << "ERROR: readlink() failed" << std::endl;
+    }
+#endif
+    std::string xyzFuncFileName = m_sceneDesc.spectrum.xyzFuncFile;
+    std::string upSampleBasisFileName = m_sceneDesc.spectrum.upSampleBasisFile;
+    std::filesystem::path xyzFuncDir = exePath.parent_path().parent_path().parent_path().parent_path() / "spectrum" / xyzFuncFileName;
+    std::filesystem::path upSampleBasisDir = exePath.parent_path().parent_path().parent_path().parent_path() / "spectrum" / upSampleBasisFileName;
+
+    // CSV ファイルの読み込み
+    m_xyz = loadSpectrumDataFromCSV(xyzFuncDir.string());
+    m_rgbUpSamplingBasis = loadSpectrumDataFromCSV(upSampleBasisDir.string());
+
+    
+    // アップロード
+    cudaResourceDesc res_desc = {};
+    cudaChannelFormatDesc channel_desc;
+    channel_desc = cudaCreateChannelDesc<float>();
+    for(int i = 0; i < 3; ++i) {
+        const size_t N = m_xyz.data[i].size();
+        std::cout << "Spectrum size: " << N << std::endl;
+        cudaArray_t textureArray;
+        CUDA_CHECK(cudaMallocArray(&textureArray, &channel_desc, N, 0));
+        CUDA_CHECK(cudaMemcpyToArray(
+            textureArray, 0, 0, 
+            m_xyz.data[i].data(), N * sizeof(float), 
+            cudaMemcpyHostToDevice
+        ));
+
+        res_desc.resType    = cudaResourceTypeArray;
+        res_desc.res.array.array = textureArray;
+        cudaTextureDesc tex_desc = {};
+        tex_desc.addressMode[0] = cudaAddressModeClamp;
+        tex_desc.filterMode     = cudaFilterModeLinear;
+        tex_desc.readMode       = cudaReadModeElementType;
+        tex_desc.normalizedCoords = 1;
+        tex_desc.mipmapFilterMode    = cudaFilterModePoint;
+
+        // Create texture object
+        cudaTextureObject_t cudaTex = 0;
+        CUDA_CHECK(cudaCreateTextureObject(&cudaTex, &res_desc, &tex_desc, nullptr));
+        m_xyzFuncArrays.push_back(textureArray);
+        m_xyzFuncObjects.push_back(cudaTex);
+        m_launchParams.spectral.xyzFunc[i] = cudaTex;    
+    }
+
+    for(int i = 0; i < 3; ++i) {
+        const size_t N = m_rgbUpSamplingBasis.data[i].size();
+        cudaArray_t textureArray;
+        CUDA_CHECK(cudaMallocArray(&textureArray, &channel_desc, N, 0));
+        CUDA_CHECK(cudaMemcpyToArray(
+            textureArray, 0, 0, 
+            m_rgbUpSamplingBasis.data[i].data(), N * sizeof(float), 
+            cudaMemcpyHostToDevice
+        ));
+
+        res_desc.resType    = cudaResourceTypeArray;
+        res_desc.res.array.array = textureArray;
+        cudaTextureDesc tex_desc = {};
+        tex_desc.addressMode[0] = cudaAddressModeClamp;
+        tex_desc.filterMode     = cudaFilterModeLinear;
+        tex_desc.readMode       = cudaReadModeElementType;
+        tex_desc.normalizedCoords = 1;
+        tex_desc.mipmapFilterMode    = cudaFilterModePoint;
+
+        // Create texture object
+        cudaTextureObject_t cudaTex = 0;
+        CUDA_CHECK(cudaCreateTextureObject(&cudaTex, &res_desc, &tex_desc, nullptr));
+        m_rgbUpSampleFuncArrays.push_back(textureArray);
+        m_rgbUpSampleFuncObjects.push_back(cudaTex);
+        m_launchParams.spectral.upSampleFunc[i] = cudaTex;
+
+    }
+
+    
+    m_launchParams.spectral.wavelengthMin = fmaxf(m_xyz.lambdaMin, m_rgbUpSamplingBasis.lambdaMin);
+    m_launchParams.spectral.wavelengthMax = fminf(m_xyz.lambdaMax, m_rgbUpSamplingBasis.lambdaMax);
+
+}
+
+SpectrumData Renderer::loadSpectrumDataFromCSV(const std::string path){
+    // CSV ファイルの読み込み
+    std::ifstream ifs(path);
+    if(!ifs) throw std::runtime_error("cannot_open: " + path);
+
+    SpectrumData out;
+    out.lambdaMin = 1e10f;
+    out.lambdaMax = -1e10f;
+    std::string line;
+    bool headerSkipped = false;
+    while(std::getline(ifs, line)){
+        if(line.empty()) continue;
+
+        if(!headerSkipped){
+            std::istringstream hs(line);
+            std::string tok;
+            std::getline(hs, tok, ',');
+            bool numeric = !tok.empty() && (std::isdigit(tok[0]) || tok[0]=='-' || tok[0]=='+');
+            if(!numeric) {
+                headerSkipped=true; 
+                continue;
+            }
+        }
+        std::istringstream ss(line);
+        std::string t0, t1, t2, t3;
+        if(!std::getline(ss, t0, ',')) continue;
+        if(!std::getline(ss, t1, ',')) continue;
+        if(!std::getline(ss, t2, ',')) continue;
+        if(!std::getline(ss, t3, ',')) continue;
+
+        const float lambda = stof(t0);
+        if(lambda < out.lambdaMin) out.lambdaMin = lambda;
+        if(lambda > out.lambdaMax) out.lambdaMax = lambda;
+        
+        out.data[0].push_back(std::stof(t1));
+        out.data[1].push_back(std::stof(t2));
+        out.data[2].push_back(std::stof(t3));
+
+    }
+    size_t n = out.data[0].size();
+    if(out.data[1].size() != n || out.data[2].size() != n) throw std::runtime_error("CSV columns mismatch");
+    return out;
+};

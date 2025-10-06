@@ -1,9 +1,9 @@
 {
   "objects": [
     {
-      "name": "Cornell Box",
+      "name": "City",
       "type": "mesh",
-      "file": "CornellBox\\CornellBox-Original.obj",
+      "file": "tokyo\\53394525_bldg_6677.fbx",
       "TRS": {
         "transform": [
           0.0,
@@ -17,11 +17,38 @@
           1.0
         ],
         "scale": [
-          1.0,
-          1.0,
-          1.0
+          0.01,
+          0.01,
+          0.01
         ]
-      }
+      },
+      "placeCenterBBoxAtOrigin": true,
+      "placeOnGround": true
+    },
+    {
+      "name": "Ground",
+      "type": "mesh",
+      "file": "tokyo\\unitSphere.fbx",
+      "TRS": {
+        "transform": [
+          0.0,
+          -3948.7,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          4000.0,
+          4000.0,
+          4000.0
+        ]
+      },
+      "placeCenterBBoxAtOrigin": false,
+      "placeOnGround": false
     }
   ],
   "camera": {
@@ -51,7 +78,13 @@
   },
   "integrator": {
     "type": "Path Tracing",
-    "applySpectralRendering": false,
-    "spp": 1
-  }
+    "applySpectralRendering": true,
+    "spp": 1,
+    "maxBounce": 8
+  },
+  "spectrum": {
+    "upSampleBasisFile": "basis_rgb.csv",
+    "xyzFuncFile": "xyzbar_from_lms.csv"
+  },
+  "enableGroundRendering": false
 }

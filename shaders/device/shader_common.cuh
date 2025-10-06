@@ -14,7 +14,7 @@ struct LensRay
     float weight    {1.0f};
 };
 
-struct IntersectedData
+struct IntersectedData_RGB
 {
     float3 baseColor;
     float ior;
@@ -24,12 +24,31 @@ struct IntersectedData
     float3 normal;
 };
 
-struct LightSample
+struct IntersectedData_Spectral
+{
+    float baseColor;
+    float ior;
+    float roughness;
+    float metallic;
+    float3 wiLocal;
+    float3 normal;
+};
+
+struct LightSample_RGB
 {
     float3  position;
     float3  direction;
     float distance      {1e7f};
     float3  emission    {make_float3(0.0f)};
+    float   pdf         {0.0f};
+};
+
+struct LightSample_Spectral
+{
+    float3  position;
+    float3  direction;
+    float distance      {1e7f};
+    float  emission     {0.0f};
     float   pdf         {0.0f};
 };
 
@@ -167,7 +186,12 @@ inline __device__ float3 visibleNormalSampling( const float alpha,
     return Ne;
 }
 
-inline __device__ float3 evalLambertBRDF(const float3 baseColor, const float3 wo, const float3 wi)
+inline __device__ float3 evalLambertBRDF_RGB(const float3 baseColor, const float3 wo, const float3 wi)
+{
+    return baseColor / M_PI;
+}
+
+inline __device__ float evalLambertBRDF_Spectral(const float baseColor, const float3 wo, const float3 wi)
 {
     return baseColor / M_PI;
 }
@@ -207,7 +231,7 @@ inline __device__ float schlick(const float3 wo, const float3 n, const float F0)
     return F0 + (1.0f - F0) * powf(1.f - dot(wo, n), 5);
 }
 
-inline __device__ float3 evalSpecularBRDF( const float alpha, 
+inline __device__ float3 evalSpecularBRDF_RGB( const float alpha, 
                                         const float3 F0, 
                                         const float3& wo, 
                                         const float3& wi)
@@ -222,6 +246,25 @@ inline __device__ float3 evalSpecularBRDF( const float alpha,
     float on = fmaxf(wo.y, 1e-4f);
 
     float3 brdf = F * G * D / (4.f * in * on + 1e-5f);
+
+    return brdf;
+}
+
+inline __device__ float evalSpecularBRDF_Spectral( const float alpha, 
+                                        const float F0, 
+                                        const float3& wo, 
+                                        const float3& wi)
+{
+    float3 wm = normalize(wo + wi);
+
+    float D = ggx_D(alpha, wm);
+    float G = smith_G2(alpha, wo, wi);
+    float F = schlick(wo, wm, F0);
+
+    float in = fmaxf(wi.y, 1e-4f);
+    float on = fmaxf(wo.y, 1e-4f);
+
+    float brdf = F * G * D / (4.f * in * on + 1e-5f);
 
     return brdf;
 }
@@ -283,6 +326,20 @@ static __forceinline__ __device__ float2 envUVFromSpherical(
     u = u - floorf(u);
     v = fminf(fmaxf(v, 0.0f), 1.0f);
     return make_float2(u, v);
+}
+
+static __forceinline__ __device__ float upSamplingFromRGB(const float3 rgb, const PRDSpectral prd)
+{
+    // 0-1
+    const float functionFetchValue = prd.waveLengthNormalized;
+    
+    // Sampled upsampling func
+    const float upSamplingFuncR = tex1D<float>(optixLaunchParams.spectral.upSampleFunc[0], functionFetchValue);
+    const float upSamplingFuncG = tex1D<float>(optixLaunchParams.spectral.upSampleFunc[1], functionFetchValue);
+    const float upSamplingFuncB = tex1D<float>(optixLaunchParams.spectral.upSampleFunc[2], functionFetchValue);
+
+    // upsampling
+    return rgb.x * upSamplingFuncR + rgb.y * upSamplingFuncG + rgb.z * upSamplingFuncB;
 }
 
 

@@ -4,7 +4,7 @@
 #include "../config.cuh"
 #include <optix_device.h>
 
-struct PRD {
+struct PRDRGB {
     Random random;
 
     float3 position;
@@ -15,6 +15,33 @@ struct PRD {
     float3 primaryNormal;
     float3 primaryAlbedo;
     float3 contribution;
+    
+    struct{
+        float light;
+        float bxdf;
+    } pdf;
+    
+    int bounce;
+    int lastHitMaterialType;
+    bool continueTrace;
+
+    uint instanceID;
+};
+
+struct PRDSpectral {
+    Random random;
+
+    float3 position;
+    float3 wo;          // outgoing direction (カメラ方向，ワールド空間)
+    float3 wi;          // incoming direction (光源方向，ワールド空間)
+
+    float  albedo;
+    float3 primaryNormal;
+    float3 primaryAlbedo;
+    float  contribution;
+
+    float  waveLength; // nm
+    float  waveLengthNormalized; // 0-1, テクスチャフェッチ用
     
     struct{
         float light;

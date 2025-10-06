@@ -1,6 +1,6 @@
 /build
 /model/*
-!/model/CornellBox
+!/model/tokyo
 /envmap/*
 !/envmap/symmetrical_garden_4k.hdr
 /scene/*

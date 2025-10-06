@@ -153,6 +153,15 @@ struct LaunchParams {
 
     OptixTraversableHandle traversable;
     cudaTextureObject_t envMap;
+
+    // spectral rendering
+    struct {
+        alignas(8) cudaTextureObject_t xyzFunc[3];
+        alignas(8) cudaTextureObject_t upSampleFunc[3];
+        float wavelengthMin     {390.0f};
+        float wavelengthMax     {830.0f};
+    } spectral;
+    
 };
 
 #endif // LAUNCH_PARAMS_H_
