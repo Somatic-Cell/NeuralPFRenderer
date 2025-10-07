@@ -156,7 +156,8 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_env_sphere_c
     float u, v;
     orthogonalToUVCoord(direction, &u, &v);
     const float3 emissionRGB = make_float3(tex2D<float4>(optixLaunchParams.envMap, u, v));
-    lightSample.emission = upSamplingFromRGB(emissionRGB, *prd);
+    const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd->waveLengthNormalized, 0.5f);
+    lightSample.emission = upSamplingFromRGB(emissionRGB, *prd) *D65;
     return lightSample;
 }
 
@@ -215,7 +216,8 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_env_sphere_i
     // サンプリング
     float2 uv = envUVFromSpherical(theta, phi);
     const float3 emissionRGB = make_float3(tex2D<float4>(optixLaunchParams.envMap, uv.x, uv.y));
-    lightSample.emission = upSamplingFromRGB(emissionRGB, *prd);
+    const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd->waveLengthNormalized, 0.5f);
+    lightSample.emission = upSamplingFromRGB(emissionRGB, *prd) *D65;
     
     // PDF の計算
     const float pPatch = wPatch[patchIndex] / totalWeight;
@@ -273,13 +275,14 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_triangle_spe
             emissionRGB *= make_float3(tex2D<float4>(triangleLightData.emissiveTexture.texture, sampledUVCoodinate.x, 1.0 - sampledUVCoodinate.y));
         }
         float emission = upSamplingFromRGB(emissionRGB, *prd);
+        const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd->waveLengthNormalized, 0.5f);
         float pdfInTriangle = 1.0f / areaInWorld; // 面積
         float geometricTerm = cosTheta / fmaxf(distance * distance, 1e-7f);
         lightSample.pdf         = pdfInTriangle /  float(optixLaunchParams.light.numLights) / geometricTerm;
         lightSample.distance    = distance;
         lightSample.position    = sampledPosition;
         lightSample.direction   = lightDirection;
-        lightSample.emission    = emission * optixLaunchParams.light.lightIntensityFactor; // MEMO: pdfChoseLight とするのが分かりやすいい？
+        lightSample.emission    = emission * optixLaunchParams.light.lightIntensityFactor * D65; // MEMO: pdfChoseLight とするのが分かりやすいい？
     }
 
     return lightSample;

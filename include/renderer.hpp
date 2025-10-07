@@ -70,7 +70,7 @@ struct Camera {
 struct SpectrumData{
     float lambdaMin;
     float lambdaMax;
-    std::array<std::vector<float>, 3> data;
+    std::vector<float> data;
 };
 
 class Renderer 
@@ -120,7 +120,7 @@ protected:
 
     // Spectral rendering 用
     void uploadSpectrumData();
-    SpectrumData loadSpectrumDataFromCSV(const std::string path);
+    SpectrumData loadSpectrumDataFromCSV(const std::string path, const int lambdaCol, const int DataCol);
 
     CUcontext           m_cudaContext;
     CUstream            m_stream;
@@ -222,8 +222,9 @@ protected:
     sceneIO::Scene m_sceneDesc;
 
     // for spectral rendering
-    SpectrumData    m_xyz;
-    SpectrumData    m_rgbUpSamplingBasis;
+    std::vector<SpectrumData>       m_xyz;
+    std::vector<SpectrumData>       m_rgbUpSamplingBasis;
+    SpectrumData                    m_D65;
 
     // XYZ 等色関数
     std::vector<cudaArray_t>            m_xyzFuncArrays;    // 関数の実体が入ったデータのベクトル
@@ -232,6 +233,10 @@ protected:
     // RGB テクスチャのアップサンプリング用の関数
     std::vector<cudaArray_t>            m_rgbUpSampleFuncArrays;    // 関数の実体が入ったデータのベクトル
     std::vector<cudaTextureObject_t>    m_rgbUpSampleFuncObjects;   // 関数にアクセスするためのハンドル
+
+    // D65 光源分布
+    cudaArray_t                         m_D65Array;
+    cudaTextureObject_t                 m_D65Object;
 };
 
 

@@ -65,9 +65,11 @@ extern "C" __global__ void __miss__radiance_spectral()
     orthogonalToUVCoord(prd.wi, &u, &v);
     float3 emissionRGB =  make_float3(tex2D<float4>(optixLaunchParams.envMap, u, v));
     float emission = upSamplingFromRGB(emissionRGB, prd);
+    const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd.waveLengthNormalized, 0.5f);
+
     
     if(prd.bounce == 0){
-        prd.contribution += prd.albedo * emission;
+        prd.contribution += prd.albedo * emission * D65;
         prd.continueTrace = false;
         return;
     }
@@ -100,6 +102,6 @@ extern "C" __global__ void __miss__radiance_spectral()
 
     const float weight = balanceHeuristicWeight(1, fmaxf(prd.pdf.bxdf, 1e-7f), 1, fmaxf(pdfLight, 1e-7f));
     emission *= weight; 
-    prd.contribution += emission * prd.albedo;
+    prd.contribution += emission * prd.albedo * D65;
     prd.continueTrace = false;
 }

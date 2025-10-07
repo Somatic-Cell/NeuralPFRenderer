@@ -158,6 +158,7 @@ struct LaunchParams {
     struct {
         alignas(8) cudaTextureObject_t xyzFunc[3];
         alignas(8) cudaTextureObject_t upSampleFunc[3];
+        alignas(8) cudaTextureObject_t D65;
         float wavelengthMin     {390.0f};
         float wavelengthMax     {830.0f};
     } spectral;

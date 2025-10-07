@@ -1,1 +1,1 @@
-build\bin\Release\AtmosphericRT.exe "sampleScene.json" 2>err.log
+build\bin\Release\AtmosphericRT.exe "sampleScene2.json" 2>err.log

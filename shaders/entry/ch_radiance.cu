@@ -427,6 +427,7 @@ extern "C" __global__ void __closesthit__radiance_spectral()
                 emissionRGB = make_float3(fromTexture);
             }
             float emission = upSamplingFromRGB(emissionRGB, prd);
+            const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd.waveLengthNormalized, 0.5f);
 
             if(prd.bounce != 0)
             {
@@ -437,9 +438,9 @@ extern "C" __global__ void __closesthit__radiance_spectral()
                 const float pdfLight =  pSelect * pArea * (r * r) / cosTheta;
                 
                 const float weight = balanceHeuristicWeight(1, fmaxf(prd.pdf.bxdf, 1e-7f), 1, fmaxf(pdfLight, 1e-7f));
-                prd.contribution += emission * optixLaunchParams.light.lightIntensityFactor *prd.albedo * weight;
+                prd.contribution += emission * optixLaunchParams.light.lightIntensityFactor *prd.albedo * weight * D65;
             } else {
-                prd.contribution += emission * prd.albedo * optixLaunchParams.light.lightIntensityFactor;
+                prd.contribution += emission * prd.albedo * optixLaunchParams.light.lightIntensityFactor * D65;
             }
         }
             

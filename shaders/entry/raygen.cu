@@ -184,18 +184,18 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
         }
 
         // Spectral -> XYZ
-        const float xFunc = tex1D<float>(optixLaunchParams.spectral.xyzFunc[0], wavelengthTexSamplePoint);
-        const float yFunc = tex1D<float>(optixLaunchParams.spectral.xyzFunc[1], wavelengthTexSamplePoint);
-        const float zFunc = tex1D<float>(optixLaunchParams.spectral.xyzFunc[2], wavelengthTexSamplePoint);
+        const float xFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[0], wavelengthTexSamplePoint, 0.5f);
+        const float yFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[1], wavelengthTexSamplePoint, 0.5f);
+        const float zFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[2], wavelengthTexSamplePoint, 0.5f);
 
         const float x = xFunc * prd.contribution;
         const float y = yFunc * prd.contribution;
         const float z = zFunc * prd.contribution;
         // XYZ -> sRGB (D65)
         // MEMO: この変換行列は簡易版であり，本当は厳密に計算して求める必要がある
-        const float contribR =  3.240542f * x - 1.5371835f * y - 0.4985314f * z;
-        const float contribG = -0.969260f * x + 1.8760108f * y + 0.0415560f * z;
-        const float contribB =  0.055643f * x - 0.2040259f * y + 1.0572552f * z;
+        const float contribR =  3.240542f * x -1.5371835f * y -0.4985314f * z;
+        const float contribG = -0.969260f * x +1.8760108f * y +0.0415560f * z;
+        const float contribB =  0.055643f * x -0.2040259f * y +1.0572552f * z;
 
         const float3 contributionRGB = make_float3(contribR, contribG, contribB);
 
@@ -204,7 +204,7 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
         pixelAlbedo = pixelAlbedo + (prd.primaryAlbedo - pixelAlbedo) / (sampleID + 1.0f);
 
     }
-    pixelColor = clamp(pixelColor, 0.0f, 1000.0f);
+    pixelColor = clamp(pixelColor, -1000.0f, 1000.0f);
     if(!isfinite(pixelColor.x) || !isfinite(pixelColor.y) || !isfinite(pixelColor.z)){
         pixelColor = make_float3(0.0f);
     }

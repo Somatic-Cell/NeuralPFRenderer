@@ -334,9 +334,9 @@ static __forceinline__ __device__ float upSamplingFromRGB(const float3 rgb, cons
     const float functionFetchValue = prd.waveLengthNormalized;
     
     // Sampled upsampling func
-    const float upSamplingFuncR = tex1D<float>(optixLaunchParams.spectral.upSampleFunc[0], functionFetchValue);
-    const float upSamplingFuncG = tex1D<float>(optixLaunchParams.spectral.upSampleFunc[1], functionFetchValue);
-    const float upSamplingFuncB = tex1D<float>(optixLaunchParams.spectral.upSampleFunc[2], functionFetchValue);
+    const float upSamplingFuncR = tex2D<float>(optixLaunchParams.spectral.upSampleFunc[0], functionFetchValue, 0.5f);
+    const float upSamplingFuncG = tex2D<float>(optixLaunchParams.spectral.upSampleFunc[1], functionFetchValue, 0.5f);
+    const float upSamplingFuncB = tex2D<float>(optixLaunchParams.spectral.upSampleFunc[2], functionFetchValue, 0.5f);
 
     // upsampling
     return rgb.x * upSamplingFuncR + rgb.y * upSamplingFuncG + rgb.z * upSamplingFuncB;

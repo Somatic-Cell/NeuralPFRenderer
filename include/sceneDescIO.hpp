@@ -69,6 +69,7 @@ namespace sceneIO {
     struct Spectrum {
         std::string xyzFuncFile = "xyzbar_from_lms.csv";
         std::string upSampleBasisFile = "basis_rgb.csv";
+        std::string D65File = "CIE_std_illum_D65.csv";
     };
 
     struct Scene {
@@ -185,12 +186,14 @@ namespace sceneIO {
     inline void from_json(const nlohmann::ordered_json& j, Spectrum& v){
         v.upSampleBasisFile = j.value("upSampleBasisFile", v.upSampleBasisFile);
         v.xyzFuncFile       = j.value("xyzFuncFile", v.xyzFuncFile);
+        v.D65File           = j.value("D65File", v.D65File);
     }
 
     inline void to_json(nlohmann::ordered_json& j, const Spectrum& v){
         j = {
             {"upSampleBasisFile", v.upSampleBasisFile},
             {"xyzFuncFile", v.xyzFuncFile},
+            {"D65File", v.D65File},
         };
     }
 

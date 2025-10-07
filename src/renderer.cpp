@@ -1535,64 +1535,76 @@ void Renderer::uploadSpectrumData()
 #endif
     std::string xyzFuncFileName = m_sceneDesc.spectrum.xyzFuncFile;
     std::string upSampleBasisFileName = m_sceneDesc.spectrum.upSampleBasisFile;
+    std::string D65FileName = m_sceneDesc.spectrum.D65File;
     std::filesystem::path xyzFuncDir = exePath.parent_path().parent_path().parent_path().parent_path() / "spectrum" / xyzFuncFileName;
     std::filesystem::path upSampleBasisDir = exePath.parent_path().parent_path().parent_path().parent_path() / "spectrum" / upSampleBasisFileName;
+    std::filesystem::path D65Dir = exePath.parent_path().parent_path().parent_path().parent_path() / "spectrum" / D65FileName;
 
     // CSV ファイルの読み込み
-    m_xyz = loadSpectrumDataFromCSV(xyzFuncDir.string());
-    m_rgbUpSamplingBasis = loadSpectrumDataFromCSV(upSampleBasisDir.string());
+    for(int i = 0; i < 3; ++i){
+        SpectrumData xyz = loadSpectrumDataFromCSV(xyzFuncDir.string(), 0, i+1);
+        SpectrumData rgbUpSamplingBasis = loadSpectrumDataFromCSV(upSampleBasisDir.string(), 0, i+1);
 
+        m_xyz.push_back(xyz);
+        m_rgbUpSamplingBasis.push_back(rgbUpSamplingBasis);
+    }
     
+    m_D65 = loadSpectrumDataFromCSV(D65Dir.string(), 0, 1);
+
     // アップロード
-    cudaResourceDesc res_desc = {};
-    cudaChannelFormatDesc channel_desc;
-    channel_desc = cudaCreateChannelDesc<float>();
     for(int i = 0; i < 3; ++i) {
-        const size_t N = m_xyz.data[i].size();
+        cudaChannelFormatDesc channel_desc;
+        channel_desc = cudaCreateChannelDesc<float>();
+        const size_t N = m_xyz[i].data.size();
         std::cout << "Spectrum size: " << N << std::endl;
         cudaArray_t textureArray;
-        CUDA_CHECK(cudaMallocArray(&textureArray, &channel_desc, N, 0));
+        CUDA_CHECK(cudaMallocArray(&textureArray, &channel_desc, N, 1));
         CUDA_CHECK(cudaMemcpyToArray(
             textureArray, 0, 0, 
-            m_xyz.data[i].data(), N * sizeof(float), 
+            m_xyz[i].data.data(), N * sizeof(float), 
             cudaMemcpyHostToDevice
         ));
 
+        cudaResourceDesc res_desc = {};
         res_desc.resType    = cudaResourceTypeArray;
         res_desc.res.array.array = textureArray;
+        
         cudaTextureDesc tex_desc = {};
         tex_desc.addressMode[0] = cudaAddressModeClamp;
         tex_desc.filterMode     = cudaFilterModeLinear;
         tex_desc.readMode       = cudaReadModeElementType;
         tex_desc.normalizedCoords = 1;
-        tex_desc.mipmapFilterMode    = cudaFilterModePoint;
 
         // Create texture object
         cudaTextureObject_t cudaTex = 0;
         CUDA_CHECK(cudaCreateTextureObject(&cudaTex, &res_desc, &tex_desc, nullptr));
         m_xyzFuncArrays.push_back(textureArray);
         m_xyzFuncObjects.push_back(cudaTex);
-        m_launchParams.spectral.xyzFunc[i] = cudaTex;    
+        m_launchParams.spectral.xyzFunc[i] = cudaTex;
     }
 
     for(int i = 0; i < 3; ++i) {
-        const size_t N = m_rgbUpSamplingBasis.data[i].size();
+        cudaChannelFormatDesc channel_desc;
+        channel_desc = cudaCreateChannelDesc<float>();
+        const size_t N = m_rgbUpSamplingBasis[i].data.size();
+        std::cout << "Spectrum size: " << N << std::endl;
         cudaArray_t textureArray;
-        CUDA_CHECK(cudaMallocArray(&textureArray, &channel_desc, N, 0));
+        CUDA_CHECK(cudaMallocArray(&textureArray, &channel_desc, N, 1));
         CUDA_CHECK(cudaMemcpyToArray(
             textureArray, 0, 0, 
-            m_rgbUpSamplingBasis.data[i].data(), N * sizeof(float), 
+            m_rgbUpSamplingBasis[i].data.data(), N * sizeof(float), 
             cudaMemcpyHostToDevice
         ));
 
-        res_desc.resType    = cudaResourceTypeArray;
-        res_desc.res.array.array = textureArray;
-        cudaTextureDesc tex_desc = {};
-        tex_desc.addressMode[0] = cudaAddressModeClamp;
-        tex_desc.filterMode     = cudaFilterModeLinear;
-        tex_desc.readMode       = cudaReadModeElementType;
-        tex_desc.normalizedCoords = 1;
-        tex_desc.mipmapFilterMode    = cudaFilterModePoint;
+        cudaResourceDesc res_desc = {};
+        res_desc.resType            = cudaResourceTypeArray;
+        res_desc.res.array.array    = textureArray;
+        
+        cudaTextureDesc tex_desc    = {};
+        tex_desc.addressMode[0]     = cudaAddressModeClamp;
+        tex_desc.filterMode         = cudaFilterModeLinear;
+        tex_desc.readMode           = cudaReadModeElementType;
+        tex_desc.normalizedCoords   = 1;
 
         // Create texture object
         cudaTextureObject_t cudaTex = 0;
@@ -1603,13 +1615,54 @@ void Renderer::uploadSpectrumData()
 
     }
 
+    const size_t N = m_D65.data.size();
+    float D65Sum = 0.0f;
+    for(int i = 0; i < m_D65.data.size(); ++i){
+        D65Sum += m_D65.data[i];
+    }
+    float D65Average = D65Sum / (float)N;
+    std::cout << "D65: " << D65Sum << std::endl;
+    for(int i = 0; i < m_D65.data.size(); ++i){
+        m_D65.data[i] /= D65Average;
+    }
+
+    cudaChannelFormatDesc channel_desc;
+    channel_desc = cudaCreateChannelDesc<float>();
+    std::cout << "Spectrum size: " << N << std::endl;
+    cudaArray_t textureArray;
+    CUDA_CHECK(cudaMallocArray(&textureArray, &channel_desc, N, 1));
+    CUDA_CHECK(cudaMemcpyToArray(
+        textureArray, 0, 0, 
+        m_D65.data.data(), N * sizeof(float), 
+        cudaMemcpyHostToDevice
+    ));
+
+    cudaResourceDesc res_desc = {};
+    res_desc.resType            = cudaResourceTypeArray;
+    res_desc.res.array.array    = textureArray;
     
-    m_launchParams.spectral.wavelengthMin = fmaxf(m_xyz.lambdaMin, m_rgbUpSamplingBasis.lambdaMin);
-    m_launchParams.spectral.wavelengthMax = fminf(m_xyz.lambdaMax, m_rgbUpSamplingBasis.lambdaMax);
+    cudaTextureDesc tex_desc    = {};
+    tex_desc.addressMode[0]     = cudaAddressModeClamp;
+    tex_desc.filterMode         = cudaFilterModeLinear;
+    tex_desc.readMode           = cudaReadModeElementType;
+    tex_desc.normalizedCoords   = 1;
+
+    // Create texture object
+    cudaTextureObject_t cudaTex = 0;
+    CUDA_CHECK(cudaCreateTextureObject(&cudaTex, &res_desc, &tex_desc, nullptr));
+    m_D65Array = textureArray;
+    m_D65Object = cudaTex;
+    m_launchParams.spectral.D65 = cudaTex;
+
+
+
+    m_launchParams.spectral.wavelengthMin = fmaxf(fmaxf(m_xyz[0].lambdaMin, m_D65.lambdaMin), m_rgbUpSamplingBasis[0].lambdaMin);
+    m_launchParams.spectral.wavelengthMax = fminf(fminf(m_xyz[0].lambdaMax, m_D65.lambdaMin), m_rgbUpSamplingBasis[0].lambdaMax);
 
 }
 
-SpectrumData Renderer::loadSpectrumDataFromCSV(const std::string path){
+
+SpectrumData Renderer::loadSpectrumDataFromCSV(const std::string path, const int lambdaCol, const int DataCol){
     // CSV ファイルの読み込み
     std::ifstream ifs(path);
     if(!ifs) throw std::runtime_error("cannot_open: " + path);
@@ -1633,22 +1686,16 @@ SpectrumData Renderer::loadSpectrumDataFromCSV(const std::string path){
             }
         }
         std::istringstream ss(line);
-        std::string t0, t1, t2, t3;
-        if(!std::getline(ss, t0, ',')) continue;
-        if(!std::getline(ss, t1, ',')) continue;
-        if(!std::getline(ss, t2, ',')) continue;
-        if(!std::getline(ss, t3, ',')) continue;
-
-        const float lambda = stof(t0);
+        std::array<std::string, 4> t;
+        for(int i = 0; i < DataCol + 1; ++i){
+            if(!std::getline(ss, t[i], ',')) continue;
+        }
+        
+        const float lambda = stof(t[lambdaCol]);
         if(lambda < out.lambdaMin) out.lambdaMin = lambda;
         if(lambda > out.lambdaMax) out.lambdaMax = lambda;
         
-        out.data[0].push_back(std::stof(t1));
-        out.data[1].push_back(std::stof(t2));
-        out.data[2].push_back(std::stof(t3));
-
+        out.data.push_back(std::stof(t[DataCol]));
     }
-    size_t n = out.data[0].size();
-    if(out.data[1].size() != n || out.data[2].size() != n) throw std::runtime_error("CSV columns mismatch");
     return out;
 };

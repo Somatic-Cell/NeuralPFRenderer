@@ -262,7 +262,7 @@ void MeshLoader::parseMaterial(Material& dstMaterial, const aiMaterial* pSrcMate
     pSrcMaterial->Get(AI_MATKEY_NAME, materialName);
     std::string nameStr(materialName.C_Str());
 
-    if((nameStr.find("Glass") != std::string::npos) || (nameStr.find("glass") != std::string::npos) || (shading == aiShadingMode_Fresnel))
+    if((nameStr.find("Glass") != std::string::npos) || (nameStr.find("glass") != std::string::npos) || (nameStr.find("water") != std::string::npos) || (shading == aiShadingMode_Fresnel))
     {
         std::cout << "This material may be glass:" << nameStr <<"Raised a glass flag" << std::endl;
         dstMaterial.isGlass = true;

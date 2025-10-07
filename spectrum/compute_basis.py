@@ -12,7 +12,7 @@ from scipy.interpolate import interp1d
 from scipy.interpolate import PchipInterpolator
 from scipy.optimize import linprog, minimize, Bounds, LinearConstraint
 
-wavelengths = np.arange(390, 781, 5) # D65 + LMS 2006
+wavelengths = np.arange(390, 831, 5) # D65 + LMS 2006
 
 M_XYZ_FROM_LMS = np.array([
     [1.94735469, -1.41445123, 0.36476327],
@@ -26,6 +26,8 @@ DATA_DIR = Path(".") # もし他の場所に CSV ファイルがあるなら変�
 FN_C        = "CIE_illum_C.csv"
 FN_D65      = "CIE_std_illum_D65.csv"
 FN_LMS2006  = "CIE_lms_cf_2deg.csv"
+FN_XYZ1931  = "CIE_xyz_1931_2deg.csv"
+
 
 OUT_BASIS_CSV   = "basis_rgb.csv"
 OUT_XYZ_CSV     = "xyzbar_from_lms.csv"
@@ -236,20 +238,22 @@ def check_basis(
 def main():
     
     # 光源情報のデータの読み込み
-    xs0 = np.arange(300, 831, 1, dtype=float)
-    xsC, C      = load_csv(FN_C)
+    # xsC, C      = load_csv(FN_C)
     xsD65, D65  = load_csv(FN_D65)
 
     # 光源情報のデータを wavelength のサイズと一致させるためにリサンプリング
-    C_rs    = resample_spectrum(C, xsC, wavelengths)
+    # C_rs    = resample_spectrum(C, xsC, wavelengths)
     D65_rs  = resample_spectrum(D65, xsD65, wavelengths)
 
     # LMS 関数の読み込みと等色関数への変換
-    xs_lms, lms_full = load_csv(FN_LMS2006)
-    lms_rs      = resample_spectrum(lms_full, xs_lms, wavelengths)
+    # xs_lms, lms_full = load_csv(FN_LMS2006)
+    # lms_rs      = resample_spectrum(lms_full, xs_lms, wavelengths)
+    # xyzbar = lms_to_xyzbar(lms_rs, M_XYZ_FROM_LMS)
 
-    xyzbar = lms_to_xyzbar(lms_rs, M_XYZ_FROM_LMS)
-
+    # XYZ 関数の読みこみ
+    xsXYZ, XYZ  = load_csv(FN_XYZ1931)
+    xyzbar      = resample_spectrum(XYZ, xsXYZ, wavelengths) 
+    
     np.savetxt(
         OUT_XYZ_CSV, 
         np.column_stack([wavelengths, xyzbar]), 
