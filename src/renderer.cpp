@@ -1656,8 +1656,10 @@ void Renderer::uploadSpectrumData()
 
 
 
-    m_launchParams.spectral.wavelengthMin = fmaxf(fmaxf(m_xyz[0].lambdaMin, m_D65.lambdaMin), m_rgbUpSamplingBasis[0].lambdaMin);
-    m_launchParams.spectral.wavelengthMax = fminf(fminf(m_xyz[0].lambdaMax, m_D65.lambdaMin), m_rgbUpSamplingBasis[0].lambdaMax);
+    m_wavelengthMin = fmaxf(fmaxf(m_xyz[0].lambdaMin, m_D65.lambdaMin), m_rgbUpSamplingBasis[0].lambdaMin);
+    m_wavelengthMax = fminf(fminf(m_xyz[0].lambdaMax, m_D65.lambdaMax), m_rgbUpSamplingBasis[0].lambdaMax);
+    m_launchParams.spectral.wavelengthMin = m_wavelengthMin;
+    m_launchParams.spectral.wavelengthMax = m_wavelengthMax;
 
 }
 
@@ -1699,3 +1701,12 @@ SpectrumData Renderer::loadSpectrumDataFromCSV(const std::string path, const int
     }
     return out;
 };
+
+float Renderer::getWavelengthMin() const
+{
+    return m_wavelengthMin;
+}
+float Renderer::getWavelengthMax() const
+{
+    return m_wavelengthMax;
+}

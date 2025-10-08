@@ -1,9 +1,9 @@
 {
   "objects": [
     {
-      "name": "City",
+      "name": "Cornell Box",
       "type": "mesh",
-      "file": "tokyo\\53394525_bldg_6677.fbx",
+      "file": "CornellBox\\CornellBox-Empty-CO.obj",
       "TRS": {
         "transform": [
           0.0,
@@ -17,34 +17,9 @@
           1.0
         ],
         "scale": [
-          0.01,
-          0.01,
-          0.01
-        ]
-      },
-      "placeCenterBBoxAtOrigin": true,
-      "placeOnGround": true
-    },
-    {
-      "name": "Ground",
-      "type": "mesh",
-      "file": "tokyo\\unitSphere.fbx",
-      "TRS": {
-        "transform": [
-          0.0,
-          -3948.7,
-          0.0
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
+          1.0,
+          1.0,
           1.0
-        ],
-        "scale": [
-          4000.0,
-          4000.0,
-          4000.0
         ]
       },
       "placeCenterBBoxAtOrigin": false,
@@ -54,12 +29,12 @@
   "camera": {
     "from": [
       0.0,
-      0.0,
+      1.0,
       3.0
     ],
     "at": [
       0.0,
-      0.0,
+      1.0,
       -1.0
     ],
     "up": [
@@ -74,7 +49,7 @@
     "pintDist": 1.0
   },
   "environment": {
-    "file": "symmetrical_garden_4k.hdr"
+    "file": "night_sky.hdr"
   },
   "integrator": {
     "type": "Path Tracing",

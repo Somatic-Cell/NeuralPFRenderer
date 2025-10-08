@@ -96,6 +96,8 @@ public:
     float getWhite() const;
     void setExposure(const float exposure);
     float getExposure() const;
+    float getWavelengthMin() const;
+    float getWavelengthMax() const;
 
     
 
@@ -225,6 +227,8 @@ protected:
     std::vector<SpectrumData>       m_xyz;
     std::vector<SpectrumData>       m_rgbUpSamplingBasis;
     SpectrumData                    m_D65;
+    float                           m_wavelengthMin;
+    float                           m_wavelengthMax;
 
     // XYZ 等色関数
     std::vector<cudaArray_t>            m_xyzFuncArrays;    // 関数の実体が入ったデータのベクトル

@@ -30,7 +30,8 @@ FN_XYZ1931  = "CIE_xyz_1931_2deg.csv"
 
 
 OUT_BASIS_CSV   = "basis_rgb.csv"
-OUT_XYZ_CSV     = "xyzbar_from_lms.csv"
+OUT_XYZ_CSV     = "xyzbar.csv"
+OUT_ILLUM_CSV     = "illumination.csv"
 
 # -----------------------------
 # ユーティリティ
@@ -252,7 +253,16 @@ def main():
 
     # XYZ 関数の読みこみ
     xsXYZ, XYZ  = load_csv(FN_XYZ1931)
-    xyzbar      = resample_spectrum(XYZ, xsXYZ, wavelengths) 
+    xyzbar      = resample_spectrum(XYZ, xsXYZ, wavelengths)
+    
+    np.savetxt(
+        OUT_ILLUM_CSV, 
+        np.column_stack([wavelengths, D65_rs]), 
+        delimiter=",", 
+        header="wavelength(nm), D65 illuminant", 
+        comments=""
+    )
+    print(f"Saved: {OUT_ILLUM_CSV}")
     
     np.savetxt(
         OUT_XYZ_CSV, 

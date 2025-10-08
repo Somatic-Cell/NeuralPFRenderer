@@ -64,6 +64,8 @@ public:
         m_renderer.setCamera(camera);
         m_renderer.setEnvMap(scene.environment.file);
 
+        m_scene = scene;
+
 
         // 結果を描画するテクスチャの作成
         GLenum texFormat = GL_RGBA;
@@ -224,6 +226,20 @@ public:
             ImGui::End();
         }
 
+        if(m_scene.integrator.applySpectralRendering){
+            ImGui::Begin("For Spectral Rendering");
+            ImGui::Text("Spectrum Data:");
+            ImGui::Text("XYZ CMF: %s\n", m_scene.spectrum.xyzFuncFile.c_str());
+            ImGui::Text("Basis function for reflectance: %s\n",  m_scene.spectrum.upSampleBasisFile.c_str());
+            ImGui::Text("Illumination: %s\n", m_scene.spectrum.D65File.c_str());
+            ImGui::Text("Spectrum Data:");
+            ImGui::Text("Wavelength range:");
+            ImGui::Text("Min: %f nm, ", m_renderer.getWavelengthMin()); ImGui::SameLine();
+            ImGui::Text("Max: %f nm", m_renderer.getWavelengthMax()); 
+            
+            ImGui::End();
+        }
+
         GLFWCameraWindow::drawImGuiContents();
 
     }
@@ -257,6 +273,8 @@ protected:
 
     cudaSurfaceObject_t     m_surf;
     cudaArray_t             m_surfaceArray;
+
+    sceneIO::Scene          m_scene;
 };
 
 #endif // APPLICATION_HPP_
