@@ -86,6 +86,9 @@ Renderer::Renderer(std::vector<const Model*> models, sceneIO::Scene sceneDesc) :
     m_cudaModuleFileNames[static_cast<int>(PostProcessCudaModuleIdentifier::CUDA_MODULE_ID_TONEMAP)] = std::string("tonemap.ptx");
 
 
+    m_isAccumulate = m_sceneDesc.integrator.isAccumulate;
+    m_launchParams.frame.maxBounce = m_sceneDesc.integrator.maxBounce;
+    m_launchParams.frame.numPixelSamples = m_sceneDesc.integrator.spp;
 
     initOptix();
     
@@ -1623,7 +1626,7 @@ void Renderer::uploadSpectrumData()
     float D65Average = D65Sum / (float)N;
     std::cout << "D65: " << D65Sum << std::endl;
     for(int i = 0; i < m_D65.data.size(); ++i){
-        m_D65.data[i] /= D65Average;
+        m_D65.data[i] /= D65Average * 5.0f;
     }
 
     cudaChannelFormatDesc channel_desc;

@@ -5,7 +5,6 @@
 !/envmap/symmetrical_garden_4k.hdr
 /scene/*
 !/scene/sampleScene.json
-!/scene/sampleScene2.json
 /result.log
 /err.log
 /imgui.ini

@@ -387,11 +387,22 @@ public:
         const float3 & cameraFrom,
         const float3 & cameraAt,
         const float3 & cameraUp,
+        const float focalLength,
+        const float fValue,
+        const float fov,
+        const float sensitivity,
+        const float pintDist,
         const float worldScale
     ) : MyGLFWWindow(title),
     m_cameraFrame(worldScale)
     {
         m_cameraFrame.setOrientation(cameraFrom, cameraAt, cameraUp);
+        m_cameraFrame.setFocalLength(focalLength);
+        m_cameraFrame.setFValue(fValue);
+        m_cameraFrame.setFov(fov);
+        m_cameraFrame.setSensitivity(sensitivity);
+        m_cameraFrame.setPintDist(pintDist);
+        
         enableInspectMode();
         enableFlyMode();
     }

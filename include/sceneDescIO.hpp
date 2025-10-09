@@ -46,6 +46,7 @@ namespace sceneIO {
         bool        applySpectralRendering = false;
         int         spp  = 1;
         int         maxBounce = 8;
+        bool        isAccumulate  = true;
     };
 
     struct Outputs {
@@ -134,6 +135,7 @@ namespace sceneIO {
         v.applySpectralRendering    = j.value("applySpectralRendering", v.applySpectralRendering);
         v.spp                       = j.value("spp", v.spp);
         v.maxBounce                 = j.value("maxBounce", v.maxBounce);
+        v.isAccumulate              = j.value("isAccumulate", v.isAccumulate);
     }
 
     inline void to_json(nlohmann::ordered_json& j, const Integrator& v){
@@ -141,7 +143,8 @@ namespace sceneIO {
             {"type", v.type},
             {"applySpectralRendering", v.applySpectralRendering},
             {"spp", v.spp},
-            {"maxBounce", v.maxBounce}
+            {"maxBounce", v.maxBounce},
+            {"isAccumulate", v.isAccumulate}
         };
     }
 

@@ -3,7 +3,7 @@
     {
       "name": "Cornell Box",
       "type": "mesh",
-      "file": "CornellBox\\CornellBox-Empty-CO.obj",
+      "file": "CornellBox\\CornellBox-Original.obj",
       "TRS": {
         "transform": [
           0.0,
@@ -53,9 +53,10 @@
   },
   "integrator": {
     "type": "Path Tracing",
-    "applySpectralRendering": true,
+    "applySpectralRendering": false,
     "spp": 1,
-    "maxBounce": 8
+    "maxBounce": 4,
+    "isAccumulate": true
   },
   "spectrum": {
     "upSampleBasisFile": "basis_rgb.csv",
