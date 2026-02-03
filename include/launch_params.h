@@ -47,27 +47,59 @@ enum {
     NUM_LIGHT_TYPE
 };
 
-
-struct TextureSlot {
-    bool hasTexture             {false};
-    cudaTextureObject_t texture;
+enum : unsigned int {
+    HIT_KIND_VDB_ENTER = 0,
+    HIT_KIND_VDB_INSIDE = 1
 };
 
 
 struct TriangleMeshSBTData {
+    uint32_t meshIndex;
+    uint32_t materialIndex;
+};
+
+struct VDBSBTData {
+    uint32_t vdbIndex;
+    uint32_t materialIndex;
+};
+
+enum class GeomType : uint32_t {
+    Triangle    = 0,
+    VDB         = 1
+};
+
+struct HitgroupSBTData {
+    GeomType geomType;
+    union {
+        TriangleMeshSBTData tri;
+        VDBSBTData          vdb;
+    };
+};
+
+struct TextureSlot {
+    cudaTextureObject_t texture {0};
+};
+
+struct TriangleMeshGeomData {
     float3* vertex;
     float3* normal;
     float4* tangent;
-    float2* diffuseTexcoord;
-    float2* normalTexcoord;
-    float2* emissiveTexcoord;
+    float2* texcoord;
+    // float2* normalTexcoord;
+    // float2* emissiveTexcoord;
     uint3*  index;
 
     bool hasTangent;
     bool hasNormal;
+};
 
-    unsigned int instanceID;
+struct VDBGeomData {
+    CUdeviceptr nanoGrid;
+    float densityScale;
+    float emissionScale;
+};
 
+struct MaterialData {
     unsigned int    materialType;
     float3  color;
     float   roughness;
@@ -98,6 +130,7 @@ struct TriangleLightData {
 
 struct LaunchParams {
     struct {
+        // レンダリング結果を出力するバッファ
         float4* colorBuffer;
         float4* normalBuffer;
         float4* albedoBuffer;
@@ -162,7 +195,17 @@ struct LaunchParams {
         float wavelengthMin     {390.0f};
         float wavelengthMax     {830.0f};
     } spectral;
+
+    TriangleMeshGeomData* meshes;
+    int numMeshes       {0};
     
+    VDBGeomData* vdbs;
+    int numVDBs         {0};
+    
+    MaterialData* materials;
+    int numMaterials    {0};
+
+    OptixAabb* vdbAABBs;
 };
 
 #endif // LAUNCH_PARAMS_H_

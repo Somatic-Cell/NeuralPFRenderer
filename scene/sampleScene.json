@@ -54,7 +54,7 @@
   "camera": {
     "from": [
       0.0,
-      0.0,
+      1.0,
       3.0
     ],
     "at": [
@@ -80,7 +80,8 @@
     "type": "Path Tracing",
     "applySpectralRendering": true,
     "spp": 1,
-    "maxBounce": 8
+    "maxBounce": 8,
+    "isAccumulate": true
   },
   "spectrum": {
     "upSampleBasisFile": "basis_rgb.csv",

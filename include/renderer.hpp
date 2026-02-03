@@ -10,6 +10,8 @@
 #include "launch_params.h"
 #include "sceneDescIO.hpp"
 #include <cuda_runtime.h>
+#include "vdb_loader.hpp"
+
 
 enum class OptixModuleIdentifier{
     OPTIX_MODULE_ID_RAYGEN=0,
@@ -24,6 +26,8 @@ enum class OptixModuleIdentifier{
     OPTIX_MODULE_ID_BXDF_GLASS,
     OPTIX_MODULE_ID_LIGHTSAMPLE,
     OPTIX_MODULE_ID_LENS,
+    OPTIX_MODULE_ID_IS_VDB,
+    OPTIX_MODULE_ID_CH_VDB_RADIANCE,
     NUM_OPTIX_MODULE_IDENTIFIERS
 };
 
@@ -112,6 +116,7 @@ protected:
     void createCallablePrograms();
     void createPipeline();
     void buildSBT();
+    void loadAssets();
 
     bool buildAccel();
     
@@ -123,6 +128,10 @@ protected:
     // Spectral rendering 用
     void uploadSpectrumData();
     SpectrumData loadSpectrumDataFromCSV(const std::string path, const int lambdaCol, const int DataCol);
+
+    // vdb 用
+    void loadVDB();
+
 
     CUcontext           m_cudaContext;
     CUstream            m_stream;
@@ -142,7 +151,8 @@ protected:
     CUDABuffer                      m_raygenRecordsBuffer   {};
     std::vector<OptixProgramGroup>  m_missPrograms          {};
     CUDABuffer                      m_missRecordsBuffer     {};
-    std::vector<OptixProgramGroup>  m_hitgroupPrograms      {};
+    std::vector<OptixProgramGroup>  m_hitgroupProgramsMesh  {};
+    std::vector<OptixProgramGroup>  m_hitgroupProgramsVDB   {};
     CUDABuffer                      m_hitgroupRecordsBuffer {};
     std::vector<OptixProgramGroup>  m_callablePrograms      {};
     CUDABuffer                      m_callableRecordsBuffer {};
@@ -241,6 +251,22 @@ protected:
     // D65 光源分布
     cudaArray_t                         m_D65Array;
     cudaTextureObject_t                 m_D65Object;
+
+    // VDB 
+    std::shared_ptr<NanoVDBVolumeAsset> m_vdbAssets;
+    CUDABuffer                          m_vdbAABBBuffer;
+    bool                                m_hasVDB        {false};
+    CUDABuffer                          m_vdbGASBuffer;
+    OptixTraversableHandle              m_vdbGASHandle  {0};
+
+    std::vector<TriangleMeshGeomData>   m_meshTable;
+    std::vector<MaterialData>           m_materialTable;
+    std::vector<VDBGeomData>            m_vdbTable;
+    std::vector<uint32_t>               m_meshMaterialIndex;
+
+    CUDABuffer m_meshTableBuffer;
+    CUDABuffer m_materialTableBuffer;
+    CUDABuffer m_vdbTableBuffer;
 };
 
 

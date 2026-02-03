@@ -6,7 +6,7 @@
 ### JP: CMake のバージョン
 cmake_minimum_required(VERSION 3.18)
 
-set(PROJECT_NAME "AtmosphericRT")
+set(PROJECT_NAME "NeuralPFRenderer")
 set(TARGET_NAME ${PROJECT_NAME})
 
 project(${PROJECT_NAME}
@@ -58,6 +58,11 @@ option(ASSIMP_BUILD_ASSIMP_TOOLS "If the supplementary tools for Assimp are buil
 option(ASSIMP_BUILD_SAMPLES "If the official samples are built as well (needs Glut)." OFF)
 option(ASSIMP_BUILD_TESTS "If the test suite for Assimp is built in addition to the library." OFF)
 option(ASSIMP_INSTALL "Disable this if you want to use assimp as a submodule." OFF)
+option(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT "Disable this if ." OFF)
+option(ASSIMP_NO_EXPORT "Disable this if you want to use assimp as a submodule." ON)
+option(ASSIMP_WARNINGS_AS_ERRORS    "" OFF)
+option(ASSIMP_BUILD_NO_EXCEPTIONS   "" OFF)
+
 # Windows 環境
 if(MSVC)
     option(ASSIMP_BUILD_ASSIMP_VIEW "If the Assimp view tool is built. (requires DirectX)" OFF)
@@ -120,16 +125,14 @@ target_link_libraries(imgui
 add_subdirectory(${EXT_DIR}/json)
 
 # openvdb
-include(${utils_dir}/cmake/BuildVDB.cmake)
-#add_library(nvdb_runtime STATIC .cu)
-#target_link_libraries(nvdb_runtime PRIVATE nanovdb_headers)
+option(OPENVDB_BUILD_NANOVDB "to enable NanoVDB" ON)
+option(OPENVDB_ENABLE_UNINSTALL "uninstall OpenVDB" OFF)
+option(NANOVDB_USE_OPENVDB "to use OpenVDB in NanoVDB" ON)
 
-if(OPENVDB_AVAILABLE OR WITH_OPENVDB)
-    #add_library(vdb_loader STATIC src/vdbLoader.cpp)
-    if(DEFINED OPENVDB_TARGET)
-        #target_link_libraries(vdb_loader PRIVATE ${OPENVDB_TARGET})
-    endif()
-endif()
+add_subdirectory(${EXT_DIR}/openvdb)
+
+
+# include(${utils_dir}/cmake/BuildVDB.cmake)
 
 ### viewer
 add_subdirectory(viewer)
@@ -167,9 +170,11 @@ set(
     ${PROJECT_SOURCE_DIR}/shaders/entry/ah_radiance.cu
     ${PROJECT_SOURCE_DIR}/shaders/entry/ah_shadow.cu
     ${PROJECT_SOURCE_DIR}/shaders/entry/ch_radiance.cu
+    ${PROJECT_SOURCE_DIR}/shaders/entry/ch_radiance_vdb.cu
     ${PROJECT_SOURCE_DIR}/shaders/entry/ch_shadow.cu
     ${PROJECT_SOURCE_DIR}/shaders/entry/miss_radiance.cu
     ${PROJECT_SOURCE_DIR}/shaders/entry/miss_shadow.cu
+    ${PROJECT_SOURCE_DIR}/shaders/entry/intersection_vdb.cu
     ${PROJECT_SOURCE_DIR}/shaders/callable/disney_principled_brdf.cu
     ${PROJECT_SOURCE_DIR}/shaders/callable/diffuse_brdf.cu
     ${PROJECT_SOURCE_DIR}/shaders/callable/glass_bsdf.cu
@@ -197,12 +202,14 @@ set(
     ${PROJECT_SOURCE_DIR}/shaders/params/per_ray_data.cuh
     ${PROJECT_SOURCE_DIR}/shaders/device/random_number_generator.cuh
     ${PROJECT_SOURCE_DIR}/shaders/device/shader_common.cuh
+    ${PROJECT_SOURCE_DIR}/shaders/device/trace_volume.cuh
     ${PROJECT_SOURCE_DIR}/shaders/config.cuh
 )
 
 # .cu ファイルを .ptx ファイルにコンパイル (実装は nvcuda_compile_module.cmake モジュール内)
 set(CUDA_NVCC_OPTIONS
-    "-Xcompiler" "\"/utf-8 /Zc:__cplusplus\""   # 警告無視，標準準拠オプション
+    "-Xcompiler=/utf-8"                         # 警告無視
+    "-Xcompiler=/Zc:__cplusplus"                # 標準準拠オプション
     "--generate-line-info"                      # 行番号を付与し，デバッグツール等でどの行が実行中か追跡可能にするオプション
     "--gpu-architecture=compute_${CUDA_CC}"     # GPU の構成
     "--gpu-code=sm_${CUDA_CC}" 
@@ -246,6 +253,12 @@ if(USE_OPTIX_IR)
         "-I${OPTIX_INCLUDE_DIR}"
     )
 
+    set(NANOVDB_INCLUDE_DIR "${EXT_DIR}/openvdb/nanovdb")
+    list(APPEND
+        OPTIX_NVCC_OPTIONS
+        "-I${NANOVDB_INCLUDE_DIR}"
+    )
+
     if(CMAKE_BUILD_TYPE STREQUAL "Debug") # Debug ビルドのときだけ
         list(APPEND 
             OPTIX_NVCC_OPTIONS
@@ -278,13 +291,14 @@ set(BUILD_CUDA_KERNELS
 set(SOURCE_DIR src)
 set(INCLUDE_DIR include)
 
-add_executable(${PROJECT_NAME}
+add_executable(${TARGET_NAME}
     "${BUILD_CUDA_KERNELS}"
     "${SOURCE_DIR}/main.cpp"
     "${SOURCE_DIR}/renderer.cpp"
     "${SOURCE_DIR}/texture.cpp"
     "${SOURCE_DIR}/model.cpp"
     "${SOURCE_DIR}/application.cpp"
+    "${INCLUDE_DIR}/vdb_loader.hpp"
     "${INCLUDE_DIR}/optix8.hpp"
     "${INCLUDE_DIR}/renderer.hpp"
     "${INCLUDE_DIR}/texture.hpp"
@@ -301,7 +315,7 @@ add_executable(${PROJECT_NAME}
 # -----------------------------------------------------
 # コンパイル時のマクロ定義の追加
 target_compile_definitions(
-    ${PROJECT_NAME} PRIVATE
+    ${TARGET_NAME} PRIVATE
     /utf-8
     /fsanitize=address
     /O2
@@ -324,7 +338,7 @@ endif()
 
 # インクルードパスの追加
 target_include_directories(
-    ${PROJECT_NAME} PRIVATE
+    ${TARGET_NAME} PRIVATE
     "${OPTIX_INCLUDE_DIR}"
     "${CMAKE_SOURCE_DIR}/${INCLUDE_DIR}"
     ${EXT_DIR}/stb
@@ -335,7 +349,7 @@ target_include_directories(
 
 # ライブラリやターゲットをリンク
 target_link_libraries(
-    ${PROJECT_NAME}
+    ${TARGET_NAME}
     ${OPENGL_gl_LIBRARY}
     utils
     viewer
@@ -346,6 +360,8 @@ target_link_libraries(
     nlohmann_json::nlohmann_json
     CUDA::cudart        # FindCudaToolkit の成果物
     CUDA::cuda_driver   # FindCudaToolkit の成果物 (cuCtxGetCurrent() はここにいる)
+    openvdb
+    nanovdb
 )
 
 

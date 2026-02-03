@@ -10,81 +10,82 @@
 
 extern "C" __global__ void __closesthit__radiance_rgb()
 {
-
-    const TriangleMeshSBTData &sbtData =*(const TriangleMeshSBTData*) optixGetSbtDataPointer();
     PRDRGB &prd = *getPRD<PRDRGB>();
 
+    const HitgroupSBTData &sbtData =*(const HitgroupSBTData*) optixGetSbtDataPointer();
+
+    const uint32_t meshIndex = sbtData.tri.meshIndex;
+    const uint32_t materialIndex = sbtData.tri.materialIndex;
+    const TriangleMeshGeomData &mesh = optixLaunchParams.meshes[meshIndex];
+    const MaterialData & material = optixLaunchParams.materials[materialIndex];
+    
     // 基本的な交差点の情報を取得
     const int primID = optixGetPrimitiveIndex();
-    const uint3 index = sbtData.index[primID];
-    const float u = optixGetTriangleBarycentrics().x;
-    const float v = optixGetTriangleBarycentrics().y;
+    const uint3 &vertexIndex = mesh.index[primID]; 
+
+    const float2 uv = optixGetTriangleBarycentrics();
+    const float u = uv.x;
+    const float v = uv.y;
 
     // レイの進行方向を取得
-    const float3 rayDirection = normalize(optixGetWorldRayDirection());
+    const float3 rayDirection = optixGetWorldRayDirection();
     // レイとプリミティブの交差点を取得
     const float rayLength = optixGetRayTmax();
     const float3 intersectedPoint = optixGetWorldRayOrigin() + rayLength * rayDirection;
 
     // 形状処理用. 面法線を取得
-    prd.instanceID = sbtData.instanceID;
-    mymath::matrix3x4 matrixO2WPoint = optixLaunchParams.frame.objectMatrixBuffer[optixGetInstanceId()];
-    const float3 &V1 = sbtData.vertex[index.x];
-    const float3 &V2 = sbtData.vertex[index.y];
-    const float3 &V3 = sbtData.vertex[index.z];
-    const float3 v1 = mymath::mul3x4(matrixO2WPoint, make_float4(V1, 1.0f));
-    const float3 v2 = mymath::mul3x4(matrixO2WPoint, make_float4(V2, 1.0f));
-    const float3 v3 = mymath::mul3x4(matrixO2WPoint, make_float4(V3, 1.0f));
+    prd.instanceID = optixGetInstanceId();
+    const float3 &V1 = optixTransformPointFromObjectToWorldSpace(mesh.vertex[vertexIndex.x]);
+    const float3 &V2 = optixTransformPointFromObjectToWorldSpace(mesh.vertex[vertexIndex.y]);
+    const float3 &V3 = optixTransformPointFromObjectToWorldSpace(mesh.vertex[vertexIndex.z]);
+     
+    float3 Ng = normalize(cross(V2-V1, V3-V1));
+    const float triangleArea = 0.5f * fmaxf(length(cross(V2 - V1, V3 - V1)), 1e-7f);
+
     
-    float3 Ng = normalize(cross(v2-v1, v3-v1));
-    const float triangleArea = 0.5f * fmaxf(length(cross(v2 - v1, v3 - v1)), 1e-7f);
-
-
-
     // Diffuse テクスチャ座標を取得
-    const float2 &UVDiffuse1 = sbtData.diffuseTexcoord[index.x];
-    const float2 &UVDiffuse2 = sbtData.diffuseTexcoord[index.y];
-    const float2 &UVDiffuse3 = sbtData.diffuseTexcoord[index.z];
+    const float2 &UVDiffuse1 = mesh.texcoord[vertexIndex.x];
+    const float2 &UVDiffuse2 = mesh.texcoord[vertexIndex.y];
+    const float2 &UVDiffuse3 = mesh.texcoord[vertexIndex.z];
 
     const float2 diffuseTextureCoordinate = (1.0f - u - v) * UVDiffuse1
         + u * UVDiffuse2
         + v * UVDiffuse3;
 
     // Normal テクスチャ座標を取得
-    const float2 &UVNormal1 = sbtData.normalTexcoord[index.x];
-    const float2 &UVNormal2 = sbtData.normalTexcoord[index.y];
-    const float2 &UVNormal3 = sbtData.normalTexcoord[index.z];
+    const float2 &UVNormal1 = mesh.texcoord[vertexIndex.x];
+    const float2 &UVNormal2 = mesh.texcoord[vertexIndex.y];
+    const float2 &UVNormal3 = mesh.texcoord[vertexIndex.z];
     
     const float2 normalTextureCoordinate = (1.0f - u - v) * UVNormal1
         + u * UVNormal2
         + v * UVNormal3;
 
     // Emissive テクスチャ座標を取得
-    const float2 &UVEmissive1 = sbtData.emissiveTexcoord[index.x];
-    const float2 &UVEmissive2 = sbtData.emissiveTexcoord[index.y];
-    const float2 &UVEmissive3 = sbtData.emissiveTexcoord[index.z];
+    const float2 &UVEmissive1 = mesh.texcoord[vertexIndex.x];
+    const float2 &UVEmissive2 = mesh.texcoord[vertexIndex.y];
+    const float2 &UVEmissive3 = mesh.texcoord[vertexIndex.z];
     const float2 emissiveTextureCoordinate = (1.0f - u - v) * UVEmissive1
         + u * UVEmissive2
         + v * UVEmissive3;
 
     // シェーディング用．頂点法線があれば頂点法線を，なければ面法線を使用
     
-    mymath::matrix3x3 matrixO2WNormal = optixLaunchParams.frame.normalMatrixBuffer[optixGetInstanceId()];
     float3 Ns = Ng;
-    if(sbtData.hasNormal){
-        const float3 &N1 = sbtData.normal[index.x];
-        const float3 &N2 = sbtData.normal[index.y];
-        const float3 &N3 = sbtData.normal[index.z];
+    if(mesh.hasNormal){
+        const float3 &N1 = mesh.normal[vertexIndex.x];
+        const float3 &N2 = mesh.normal[vertexIndex.y];
+        const float3 &N3 = mesh.normal[vertexIndex.z];
         Ns =    (1.0f - u - v) * N1
                 +            u * N2
                 +            v * N3;
-        Ns = mymath::mul3x3(matrixO2WNormal, Ns);
+        Ns = optixTransformNormalFromObjectToWorldSpace(Ns);
     }
     Ns = normalize(Ns);
     
     float3 nml = make_float3(0.0f, 0.0f, 1.0f);
-    if(sbtData.normalTexture.hasTexture) {
-        float4 fromTexture = tex2D<float4>(sbtData.normalTexture.texture, normalTextureCoordinate.x, 1.0f - normalTextureCoordinate.y);
+    if(material.normalTexture.texture > 0) {
+        float4 fromTexture = tex2D<float4>(material.normalTexture.texture, normalTextureCoordinate.x, 1.0f - normalTextureCoordinate.y);
         nml = (make_float3(fromTexture) - make_float3(0.5f)) * 2.0f ;
         nml.y = -nml.y;
         nml.z = sqrtf(fmaxf(1.0f - nml.y * nml.y - nml.x * nml.x, 0.0001f));
@@ -92,50 +93,40 @@ extern "C" __global__ void __closesthit__radiance_rgb()
 
     // 接ベクトル空間の計算
     float4 tan = (fabsf(Ns.x) > 0.999f) ? make_float4(0.0f, 1.0f, 0.0f, 1.0f) : make_float4(1.0f, 0.0f, 0.0f, 1.0f);
-    if(sbtData.hasTangent){
-        const float4 &T1 = sbtData.tangent[index.x];
-        const float4 &T2 = sbtData.tangent[index.y];
-        const float4 &T3 = sbtData.tangent[index.z];
+    if(mesh.hasTangent){
+        const float4 &T1 = mesh.tangent[vertexIndex.x];
+        const float4 &T2 = mesh.tangent[vertexIndex.y];
+        const float4 &T3 = mesh.tangent[vertexIndex.z];
         tan =  (1.0f - u - v) * T1
             +            u * T2
             +            v * T3;
 
-        tan = make_float4(mymath::mul3x3(matrixO2WNormal, make_float3(tan)), tan.w);
+        tan = make_float4(optixTransformNormalFromObjectToWorldSpace(make_float3(tan)), tan.w);
     }
 
     
     const float3 T = normalize(make_float3(tan));
-    const float3 N = normalize(Ns);
-    const float3 B = normalize(cross(N, T) * tan.w);
+    const float3 B = normalize(cross(Ns, T) * tan.w);
     
-    Ns = normalize(T * nml.x + B * nml.y + N * nml.z);
-    const float3 biNormal = normalize(cross(T, Ns)); 
-    const float3 tangent = normalize(cross(Ns, biNormal));
+    Ns = normalize(T * nml.x + B * nml.y + Ns * nml.z);
+    float3 biNormal = normalize(cross(T, Ns)); 
+    float3 tangent = normalize(cross(Ns, biNormal));
     
-    
-    // 法線の向きを調整
-    // if(dot(rayDirection, Ng) > 0.f) {
-    //     Ng = -Ng;
-    // }
     Ng = normalize(Ng);
 
-    // if(dot(Ng, Ns) < 0.f){
-    //     Ns -= 2.f * dot(Ng, Ns) * Ng;  
-    // }
-
     // Albedo の計算
-    float3 albedo = sbtData.color;
+    float3 albedo = material.color;
     
-    if(sbtData.diffuseTexture.hasTexture){
+    if(material.diffuseTexture.texture > 0){
         float4 fromTexture = tex2D<float4>(
-            sbtData.diffuseTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y);
+            material.diffuseTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y);
         albedo = make_float3(fromTexture);
     }
 
     float4 arm = make_float4(0.0f, 0.1f, 0.0f, 0.0f);
     
-    if(sbtData.rmTexture.hasTexture){
-        arm = tex2D<float4>(sbtData.rmTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y);
+    if(material.rmTexture.texture > 0){
+        arm = tex2D<float4>(material.rmTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y);
     }
 
     IntersectedData_RGB matData;
@@ -144,19 +135,28 @@ extern "C" __global__ void __closesthit__radiance_rgb()
     matData.roughness = arm.y;
     matData.baseColor = albedo;
 
+    if(dot(rayDirection, Ng) > 0.f && material.materialType != MATERIAL_TYPE_LIGHT) {
+        Ng = -Ng;
+        Ns = -Ns;
+        tangent = -tangent;
+        biNormal = normalize(cross(Ns, tangent));
+        matData.ior = 1.0f / matData.ior; // glass
+    }
+
     prd.position = intersectedPoint; // 後で置き場を考える
     // メッシュの光源と交差した場合の処理
-    if(sbtData.materialType == MATERIAL_TYPE_LIGHT)
+    if(material.materialType == MATERIAL_TYPE_LIGHT)
     {
-        const float cosTheta = dot(-1.0f * rayDirection, Ng);
-        if(cosTheta > 1e-5f)
+        const float cosTheta = fabsf(dot(-1.0f * rayDirection, Ng));
+        if(cosTheta > 1e-7f)
         {
-            float3 emission = sbtData.emissive;
-            if(sbtData.emissiveTexture.hasTexture){
+            float3 emission = material.emissive;
+            if(material.emissiveTexture.texture > 0){
                 float4 fromTexture = tex2D<float4>(
-                    sbtData.emissiveTexture.texture, emissiveTextureCoordinate.x, 1.0f - emissiveTextureCoordinate.y);
+                    material.emissiveTexture.texture, emissiveTextureCoordinate.x, 1.0f - emissiveTextureCoordinate.y);
                 emission = make_float3(fromTexture);
             }
+            emission *= optixLaunchParams.light.lightIntensityFactor;
 
             if(prd.bounce != 0)
             {
@@ -167,9 +167,9 @@ extern "C" __global__ void __closesthit__radiance_rgb()
                 const float pdfLight =  pSelect * pArea * (r * r) / cosTheta;
                 
                 const float weight = balanceHeuristicWeight(1, fmaxf(prd.pdf.bxdf, 1e-7f), 1, fmaxf(pdfLight, 1e-7f));
-                prd.contribution += emission * optixLaunchParams.light.lightIntensityFactor *prd.albedo * weight;
+                prd.contribution += emission * prd.albedo * weight;
             } else {
-                prd.contribution += emission * prd.albedo * optixLaunchParams.light.lightIntensityFactor;
+                prd.contribution += emission * prd.albedo;
             }
         }
             
@@ -185,13 +185,19 @@ extern "C" __global__ void __closesthit__radiance_rgb()
 
     const float3 woLocal = worldToLocal(-1.0f * rayDirection, tangent, Ns, biNormal);
     // ガラスのメッシュと交差した場合の処理（レイトレーシングを続行）
-    if(sbtData.materialType == MATERIAL_TYPE_GLASS)
+    if(material.materialType == MATERIAL_TYPE_GLASS)
     {
         int callableFunctionOffset = NUM_LENS_TYPE + MATERIAL_TYPE_GLASS * 2; // 登録した順番が lens の後で，glass * 2 が 対応するマテリアルの sample 関数
         prd.position = intersectedPoint;
         float3 wiLocal = optixDirectCall<float3, const float3, const IntersectedData_RGB& , PRDRGB*>(callableFunctionOffset, woLocal, matData, &prd);
         prd.wi = localToWorld(wiLocal, tangent, Ns, biNormal);
         prd.continueTrace = true;
+        prd.position += (wiLocal.y > 0.0f) ? Ng * 1e-3f : -1.0f * Ng * 1e-3f;
+
+        if(prd.bounce == 0){
+            prd.primaryNormal = Ns;
+            prd.primaryAlbedo = albedo;
+        }
         return;
     }
 
@@ -209,7 +215,7 @@ extern "C" __global__ void __closesthit__radiance_rgb()
         LightSample_RGB lightSample = optixDirectCall<LightSample_RGB, LightDefinition, PRDRGB*>(callLightType, light, &prd);
         const float3 wiLocal = worldToLocal(lightSample.direction, tangent, Ns, biNormal);
 
-        if(lightSample.pdf > 0.f)
+        if(lightSample.pdf > 0.f && wiLocal.y > 0.0f)
         {
             ShadowPRD shadowPrd;
             uint32_t u0, u1;
@@ -217,7 +223,7 @@ extern "C" __global__ void __closesthit__radiance_rgb()
             
 
             // BSDF の計算
-            int callableFunctionOffset = NUM_LENS_TYPE + sbtData.materialType * 2 + 1; // 登録した順番が lens の後で，materialType * 2 + 1 が 対応するマテリアルの eval 関数 
+            int callableFunctionOffset = NUM_LENS_TYPE + material.materialType * 2 + 1; // 登録した順番が lens の後で，materialType * 2 + 1 が 対応するマテリアルの eval 関数 
             float3 bxdfValue = optixDirectCall<float3, const float3, const float3, const IntersectedData_RGB& , PRDRGB*>(callableFunctionOffset, wiLocal, woLocal, matData, &prd);
             float bxdfPdf = prd.pdf.bxdf;
             const float3 wi = localToWorld(wiLocal, tangent, Ns, biNormal); 
@@ -251,16 +257,16 @@ extern "C" __global__ void __closesthit__radiance_rgb()
     
     // 次の方向の決定
     // BSDF のサンプリング とアルベドの変更
-    int callableFunctionOffset = NUM_LENS_TYPE + sbtData.materialType * 2;
+    int callableFunctionOffset = NUM_LENS_TYPE + material.materialType * 2;
     const float3 sampledWiLocal = optixDirectCall<float3, const float3, const IntersectedData_RGB&, PRDRGB*>(callableFunctionOffset, woLocal, matData, &prd);
-    callableFunctionOffset = NUM_LENS_TYPE + sbtData.materialType * 2 + 1;
+    callableFunctionOffset = NUM_LENS_TYPE + material.materialType * 2 + 1;
     const float3 bxdfValue = optixDirectCall<float3, const float3, const float3, const IntersectedData_RGB& , PRDRGB*>(callableFunctionOffset, sampledWiLocal, woLocal, matData, &prd);
     const float3 sampledWi = localToWorld(sampledWiLocal, tangent, Ns, biNormal);
 
-    if(sampledWiLocal.y < 1e-7f){
-        prd.continueTrace = false;
-        return;
-    }
+    // if(sampledWiLocal.y < 1e-7f){
+    //     prd.continueTrace = false;
+    //     return;
+    // }
     
     prd.position += 1e-3f * Ng;
     prd.albedo *= bxdfValue * sampledWiLocal.y / fmaxf(prd.pdf.bxdf, 1e-7f);
@@ -276,15 +282,23 @@ extern "C" __global__ void __closesthit__radiance_rgb()
 
 extern "C" __global__ void __closesthit__radiance_spectral()
 {
-
-    const TriangleMeshSBTData &sbtData =*(const TriangleMeshSBTData*) optixGetSbtDataPointer();
+    const HitgroupSBTData &sbtData =*(const HitgroupSBTData*) optixGetSbtDataPointer();
     PRDSpectral &prd = *getPRD<PRDSpectral>();
 
+    const uint32_t meshIndex = sbtData.tri.meshIndex;
+    const uint32_t materialIndex = sbtData.tri.materialIndex;
+    const TriangleMeshGeomData* __restrict__ mesh = &optixLaunchParams.meshes[meshIndex];
+    const MaterialData* __restrict__ material = &optixLaunchParams.materials[materialIndex];
+    
     // 基本的な交差点の情報を取得
     const int primID = optixGetPrimitiveIndex();
-    const uint3 index = sbtData.index[primID];
-    const float u = optixGetTriangleBarycentrics().x;
-    const float v = optixGetTriangleBarycentrics().y;
+
+    const uint3 vertexIndex = mesh->index[primID];
+
+    
+    const float2 uv = optixGetTriangleBarycentrics();
+    const float u = uv.x;
+    const float v = uv.y;
 
     // レイの進行方向を取得
     const float3 rayDirection = normalize(optixGetWorldRayDirection());
@@ -293,64 +307,60 @@ extern "C" __global__ void __closesthit__radiance_spectral()
     const float3 intersectedPoint = optixGetWorldRayOrigin() + rayLength * rayDirection;
 
     // 形状処理用. 面法線を取得
-    prd.instanceID = sbtData.instanceID;
-    mymath::matrix3x4 matrixO2WPoint = optixLaunchParams.frame.objectMatrixBuffer[optixGetInstanceId()];
-    const float3 &V1 = sbtData.vertex[index.x];
-    const float3 &V2 = sbtData.vertex[index.y];
-    const float3 &V3 = sbtData.vertex[index.z];
-    const float3 v1 = mymath::mul3x4(matrixO2WPoint, make_float4(V1, 1.0f));
-    const float3 v2 = mymath::mul3x4(matrixO2WPoint, make_float4(V2, 1.0f));
-    const float3 v3 = mymath::mul3x4(matrixO2WPoint, make_float4(V3, 1.0f));
+    prd.instanceID = optixGetInstanceId();
+    const float3* __restrict__ vertex = mesh->vertex;
+    const float3 V1 = optixTransformPointFromObjectToWorldSpace(vertex[vertexIndex.x]);
+    const float3 V2 = optixTransformPointFromObjectToWorldSpace(vertex[vertexIndex.y]);
+    const float3 V3 = optixTransformPointFromObjectToWorldSpace(vertex[vertexIndex.z]);
     
-    float3 Ng = normalize(cross(v2-v1, v3-v1));
-    const float triangleArea = 0.5f * fmaxf(length(cross(v2 - v1, v3 - v1)), 1e-7f);
-
-
+    float3 Ng = normalize(cross(V2-V1, V3-V1));
+    const float triangleArea = 0.5f * fmaxf(length(cross(V2 - V1, V3 - V1)), 1e-7f);
 
     // Diffuse テクスチャ座標を取得
-    const float2 &UVDiffuse1 = sbtData.diffuseTexcoord[index.x];
-    const float2 &UVDiffuse2 = sbtData.diffuseTexcoord[index.y];
-    const float2 &UVDiffuse3 = sbtData.diffuseTexcoord[index.z];
+    const float2* __restrict__ texcoord = mesh->texcoord;
+    const float2 UVDiffuse1 = texcoord[vertexIndex.x];
+    const float2 UVDiffuse2 = texcoord[vertexIndex.y];
+    const float2 UVDiffuse3 = texcoord[vertexIndex.z];
 
     const float2 diffuseTextureCoordinate = (1.0f - u - v) * UVDiffuse1
         + u * UVDiffuse2
         + v * UVDiffuse3;
 
     // Normal テクスチャ座標を取得
-    const float2 &UVNormal1 = sbtData.normalTexcoord[index.x];
-    const float2 &UVNormal2 = sbtData.normalTexcoord[index.y];
-    const float2 &UVNormal3 = sbtData.normalTexcoord[index.z];
+    // const float2 &UVNormal1 = mesh.texcoord[vertexIndex.x];
+    // const float2 &UVNormal2 = mesh.texcoord[vertexIndex.y];
+    // const float2 &UVNormal3 = mesh.texcoord[vertexIndex.z];
     
-    const float2 normalTextureCoordinate = (1.0f - u - v) * UVNormal1
-        + u * UVNormal2
-        + v * UVNormal3;
+    const float2 normalTextureCoordinate = (1.0f - u - v) * UVDiffuse1
+        + u * UVDiffuse2
+        + v * UVDiffuse3;
 
     // Emissive テクスチャ座標を取得
-    const float2 &UVEmissive1 = sbtData.emissiveTexcoord[index.x];
-    const float2 &UVEmissive2 = sbtData.emissiveTexcoord[index.y];
-    const float2 &UVEmissive3 = sbtData.emissiveTexcoord[index.z];
-    const float2 emissiveTextureCoordinate = (1.0f - u - v) * UVEmissive1
-        + u * UVEmissive2
-        + v * UVEmissive3;
+    // const float2 &UVEmissive1 = mesh.texcoord[vertexIndex.x];
+    // const float2 &UVEmissive2 = mesh.texcoord[vertexIndex.y];
+    // const float2 &UVEmissive3 = mesh.texcoord[vertexIndex.z];
+    const float2 emissiveTextureCoordinate = (1.0f - u - v) * UVDiffuse1
+        + u * UVDiffuse2
+        + v * UVDiffuse3;
 
     // シェーディング用．頂点法線があれば頂点法線を，なければ面法線を使用
     
-    mymath::matrix3x3 matrixO2WNormal = optixLaunchParams.frame.normalMatrixBuffer[optixGetInstanceId()];
     float3 Ns = Ng;
-    if(sbtData.hasNormal){
-        const float3 &N1 = sbtData.normal[index.x];
-        const float3 &N2 = sbtData.normal[index.y];
-        const float3 &N3 = sbtData.normal[index.z];
+    if(mesh->hasNormal){
+        const float3* __restrict__ normal = mesh->normal;
+        const float3 N1 = normal[vertexIndex.x];
+        const float3 N2 = normal[vertexIndex.y];
+        const float3 N3 = normal[vertexIndex.z];
         Ns =    (1.0f - u - v) * N1
                 +            u * N2
                 +            v * N3;
-        Ns = mymath::mul3x3(matrixO2WNormal, Ns);
+        Ns = optixTransformNormalFromObjectToWorldSpace(Ns);
     }
     Ns = normalize(Ns);
     
     float3 nml = make_float3(0.0f, 0.0f, 1.0f);
-    if(sbtData.normalTexture.hasTexture) {
-        float4 fromTexture = tex2D<float4>(sbtData.normalTexture.texture, normalTextureCoordinate.x, 1.0f - normalTextureCoordinate.y);
+    if(material->normalTexture.texture > 0) {
+        float4 fromTexture = tex2D<float4>(material->normalTexture.texture, normalTextureCoordinate.x, 1.0f - normalTextureCoordinate.y);
         nml = (make_float3(fromTexture) - make_float3(0.5f)) * 2.0f ;
         nml.y = -nml.y;
         nml.z = sqrtf(fmaxf(1.0f - nml.y * nml.y - nml.x * nml.x, 0.0001f));
@@ -358,43 +368,32 @@ extern "C" __global__ void __closesthit__radiance_spectral()
 
     // 接ベクトル空間の計算
     float4 tan = (fabsf(Ns.x) > 0.999f) ? make_float4(0.0f, 1.0f, 0.0f, 1.0f) : make_float4(1.0f, 0.0f, 0.0f, 1.0f);
-    if(sbtData.hasTangent){
-        const float4 &T1 = sbtData.tangent[index.x];
-        const float4 &T2 = sbtData.tangent[index.y];
-        const float4 &T3 = sbtData.tangent[index.z];
+    if(mesh->hasTangent){
+        const float4* __restrict__ tangent = mesh->tangent;
+        const float4 T1 = tangent[vertexIndex.x];
+        const float4 T2 = tangent[vertexIndex.y];
+        const float4 T3 = tangent[vertexIndex.z];
         tan =  (1.0f - u - v) * T1
             +            u * T2
             +            v * T3;
 
-        tan = make_float4(mymath::mul3x3(matrixO2WNormal, make_float3(tan)), tan.w);
+        tan = make_float4(optixTransformNormalFromObjectToWorldSpace(make_float3(tan)), tan.w);
     }
 
     
     const float3 T = normalize(make_float3(tan));
-    const float3 N = normalize(Ns);
-    const float3 B = normalize(cross(N, T) * tan.w);
+    const float3 B = normalize(cross(Ns, T) * tan.w);
     
-    Ns = normalize(T * nml.x + B * nml.y + N * nml.z);
-    const float3 biNormal = normalize(cross(T, Ns)); 
-    const float3 tangent = normalize(cross(Ns, biNormal));
-    
-    
-    // 法線の向きを調整
-    // if(dot(rayDirection, Ng) > 0.f) {
-    //     Ng = -Ng;
-    // }
-    Ng = normalize(Ng);
-
-    // if(dot(Ng, Ns) < 0.f){
-    //     Ns -= 2.f * dot(Ng, Ns) * Ng;  
-    // }
+    Ns = normalize(T * nml.x + B * nml.y + Ns * nml.z);
+    float3 biNormal = normalize(cross(T, Ns)); 
+    float3 tangent = normalize(cross(Ns, biNormal));
 
     // Albedo の計算
-    float3 albedoRGB = sbtData.color;
+    float3 albedoRGB = material->color;
     
-    if(sbtData.diffuseTexture.hasTexture){
+    if(material->diffuseTexture.texture > 0){
         float4 fromTexture = tex2D<float4>(
-            sbtData.diffuseTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y);
+            material->diffuseTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y);
         albedoRGB = make_float3(fromTexture);
     }
 
@@ -403,8 +402,8 @@ extern "C" __global__ void __closesthit__radiance_spectral()
 
     float4 arm = make_float4(0.0f, 0.1f, 0.0f, 0.0f);
     
-    if(sbtData.rmTexture.hasTexture){
-        arm = tex2D<float4>(sbtData.rmTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y);
+    if(material->rmTexture.texture > 0){
+        arm = tex2D<float4>(material->rmTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y);
     }
 
     IntersectedData_Spectral matData;
@@ -413,21 +412,31 @@ extern "C" __global__ void __closesthit__radiance_spectral()
     matData.roughness = arm.y;
     matData.baseColor = albedo;
 
+    if(dot(rayDirection, Ng) > 0.f && material->materialType != MATERIAL_TYPE_LIGHT) {
+        Ng = -Ng;
+        Ns = -Ns;
+        tangent = -tangent;
+        biNormal = normalize(cross(Ns, tangent));
+        matData.ior = 1.0f / matData.ior; // glass
+    }
+
     prd.position = intersectedPoint; // 後で置き場を考える
+
     // メッシュの光源と交差した場合の処理
-    if(sbtData.materialType == MATERIAL_TYPE_LIGHT)
+    if(material->materialType == MATERIAL_TYPE_LIGHT)
     {
-        const float cosTheta = dot(-1.0f * rayDirection, Ng);
-        if(cosTheta > 1e-5f)
+        const float cosTheta = fabsf(dot(-1.0f * rayDirection, Ng));
+        if(cosTheta > 1e-7f)
         {
-            float3 emissionRGB = sbtData.emissive;
-            if(sbtData.emissiveTexture.hasTexture){
+            float3 emissionRGB = material->emissive;
+            if(material->emissiveTexture.texture > 0){
                 float4 fromTexture = tex2D<float4>(
-                    sbtData.emissiveTexture.texture, emissiveTextureCoordinate.x, 1.0f - emissiveTextureCoordinate.y);
+                    material->emissiveTexture.texture, emissiveTextureCoordinate.x, 1.0f - emissiveTextureCoordinate.y);
                 emissionRGB = make_float3(fromTexture);
             }
             float emission = upSamplingFromRGB(emissionRGB, prd);
             const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd.waveLengthNormalized, 0.5f);
+            emission *= (optixLaunchParams.light.lightIntensityFactor  * D65);
 
             if(prd.bounce != 0)
             {
@@ -438,9 +447,9 @@ extern "C" __global__ void __closesthit__radiance_spectral()
                 const float pdfLight =  pSelect * pArea * (r * r) / cosTheta;
                 
                 const float weight = balanceHeuristicWeight(1, fmaxf(prd.pdf.bxdf, 1e-7f), 1, fmaxf(pdfLight, 1e-7f));
-                prd.contribution += emission * optixLaunchParams.light.lightIntensityFactor *prd.albedo * weight * D65;
+                prd.contribution += emission * prd.albedo * weight;
             } else {
-                prd.contribution += emission * prd.albedo * optixLaunchParams.light.lightIntensityFactor * D65;
+                prd.contribution += emission * prd.albedo;
             }
         }
             
@@ -456,13 +465,20 @@ extern "C" __global__ void __closesthit__radiance_spectral()
 
     const float3 woLocal = worldToLocal(-1.0f * rayDirection, tangent, Ns, biNormal);
     // ガラスのメッシュと交差した場合の処理（レイトレーシングを続行）
-    if(sbtData.materialType == MATERIAL_TYPE_GLASS)
+    if(material->materialType == MATERIAL_TYPE_GLASS)
     {
         int callableFunctionOffset = NUM_LENS_TYPE + MATERIAL_TYPE_GLASS * 2; // 登録した順番が lens の後で，glass * 2 が 対応するマテリアルの sample 関数
         prd.position = intersectedPoint;
         float3 wiLocal = optixDirectCall<float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, woLocal, matData, &prd);
         prd.wi = localToWorld(wiLocal, tangent, Ns, biNormal);
         prd.continueTrace = true;
+        
+        prd.position += (wiLocal.y > 0.0f) ? Ng * 1e-3f : -1.0f * Ng * 1e-3f;
+
+        if(prd.bounce == 0){
+            prd.primaryNormal = Ns;
+            prd.primaryAlbedo = albedoRGB;
+        }
         return;
     }
 
@@ -480,7 +496,7 @@ extern "C" __global__ void __closesthit__radiance_spectral()
         LightSample_Spectral lightSample = optixDirectCall<LightSample_Spectral, LightDefinition, PRDSpectral*>(callLightType, light, &prd);
         const float3 wiLocal = worldToLocal(lightSample.direction, tangent, Ns, biNormal);
 
-        if(lightSample.pdf > 0.f)
+        if(lightSample.pdf > 0.f && wiLocal.y > 0.0f)
         {
             ShadowPRD shadowPrd;
             uint32_t u0, u1;
@@ -488,7 +504,7 @@ extern "C" __global__ void __closesthit__radiance_spectral()
             
 
             // BSDF の計算
-            int callableFunctionOffset = NUM_LENS_TYPE + sbtData.materialType * 2 + 1; // 登録した順番が lens の後で，materialType * 2 + 1 が 対応するマテリアルの eval 関数 
+            int callableFunctionOffset = NUM_LENS_TYPE + material->materialType * 2 + 1; // 登録した順番が lens の後で，materialType * 2 + 1 が 対応するマテリアルの eval 関数 
             float bxdfValue = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, wiLocal, woLocal, matData, &prd);
             float bxdfPdf = prd.pdf.bxdf;
             const float3 wi = localToWorld(wiLocal, tangent, Ns, biNormal); 
@@ -522,16 +538,17 @@ extern "C" __global__ void __closesthit__radiance_spectral()
     
     // 次の方向の決定
     // BSDF のサンプリング とアルベドの変更
-    int callableFunctionOffset = NUM_LENS_TYPE + sbtData.materialType * 2;
+    int callableFunctionOffset = NUM_LENS_TYPE + material->materialType * 2;
     const float3 sampledWiLocal = optixDirectCall<float3, const float3, const IntersectedData_Spectral&, PRDSpectral*>(callableFunctionOffset, woLocal, matData, &prd);
-    callableFunctionOffset = NUM_LENS_TYPE + sbtData.materialType * 2 + 1;
-    const float bxdfValue = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, sampledWiLocal, woLocal, matData, &prd);
     const float3 sampledWi = localToWorld(sampledWiLocal, tangent, Ns, biNormal);
+    
+    callableFunctionOffset = NUM_LENS_TYPE + material->materialType * 2 + 1;
+    const float bxdfValue = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, sampledWiLocal, woLocal, matData, &prd);
 
-    if(sampledWiLocal.y < 1e-7f){
-        prd.continueTrace = false;
-        return;
-    }
+    // if(sampledWiLocal.y < 1e-7f){
+    //     prd.continueTrace = false;
+    //     return;
+    // }
 
     prd.position += 1e-3f * Ng;
     prd.albedo *= bxdfValue * sampledWiLocal.y / fmaxf(prd.pdf.bxdf, 1e-7f);

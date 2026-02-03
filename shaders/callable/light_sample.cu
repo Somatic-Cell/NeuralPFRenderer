@@ -123,7 +123,7 @@ extern "C" __device__ LightSample_RGB __direct_callable__light_triangle_rgb(Ligh
 
     if(cosTheta > 1e-5f){
         // テクスチャの参照位置
-        if(triangleLightData.emissiveTexture.hasTexture){
+        if(triangleLightData.emissiveTexture.texture > 0){
             const float2 u0 = triangleLightData.uv0;
             const float2 u1 = triangleLightData.uv1;
             const float2 u2 = triangleLightData.uv2;
@@ -266,7 +266,7 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_triangle_spe
 
     if(cosTheta > 1e-5f){
         // テクスチャの参照位置
-        if(triangleLightData.emissiveTexture.hasTexture){
+        if(triangleLightData.emissiveTexture.texture > 0){
             const float2 u0 = triangleLightData.uv0;
             const float2 u1 = triangleLightData.uv1;
             const float2 u2 = triangleLightData.uv2;

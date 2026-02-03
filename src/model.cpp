@@ -495,7 +495,7 @@ Model *loadModel(const std::string &modelFileName, const sceneIO::Object objectD
     }
 #endif
 
-    std::filesystem::path fbxDir = exePath.parent_path().parent_path().parent_path().parent_path() / "model" / modelFileName;
+    std::filesystem::path fbxDir = exePath.parent_path().parent_path().parent_path().parent_path() / "model/mesh" / modelFileName;
     std::cout << "Model Path:" << fbxDir << std::endl;
 
     std::string err = "";

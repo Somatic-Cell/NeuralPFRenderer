@@ -342,5 +342,50 @@ static __forceinline__ __device__ float upSamplingFromRGB(const float3 rgb, cons
     return rgb.x * upSamplingFuncR + rgb.y * upSamplingFuncG + rgb.z * upSamplingFuncB;
 }
 
+static __forceinline__ __device__
+bool intersectAABB(
+    const float3& origin,
+    const float3& direction,
+    const float3& bMin, const float3& bMax,
+    float tMin, float tMax,
+    float& tEnter,  // aabb との交差位置（手前）
+    float& tExit    // aabb との交差位置（奥）
+)
+{
+    const float3 invD = make_float3(
+        (fabsf(direction.x) > 1e-20f) ? 1.0f / direction.x : 1e20f,
+        (fabsf(direction.y) > 1e-20f) ? 1.0f / direction.y : 1e20f,
+        (fabsf(direction.z) > 1e-20f) ? 1.0f / direction.z : 1e20f
+    );
+
+    float3 t0 = (bMin - origin) * invD;
+    float3 t1 = (bMax - origin) * invD;
+
+    const float3 tSmall = make_float3(
+        fminf(t0.x, t1.x), 
+        fminf(t0.y, t1.y), 
+        fminf(t0.z, t1.z) 
+    );
+    const float3 tBig = make_float3(
+        fmaxf(t0.x, t1.x), 
+        fmaxf(t0.y, t1.y), 
+        fmaxf(t0.z, t1.z) 
+    );
+
+    float tE = fmaxf(fmaxf(tSmall.x, tSmall.y), tSmall.z);
+    float tX = fminf(fminf(tBig.x,   tBig.y),   tBig.z);
+
+    if(tX <= tE) return false;
+
+    // レイ区間でクランプ
+    tE = fmaxf(tE, tMin);
+    tX = fminf(tX, tMax);
+
+    tEnter = tE;
+    tExit  = tX;
+
+    return (tEnter < tExit);
+}
+
 
 #endif // SHADER_COMMON_CUH_

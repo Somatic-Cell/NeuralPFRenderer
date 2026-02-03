@@ -42,6 +42,7 @@ extern "C" int main(int ac, char **av)
       std::vector<const Model*> models;
       models.reserve(sceneDesc.objects.size());
       for(const auto& obj : sceneDesc.objects){
+          if(obj.type != "mesh") continue;
           std::cout << "Model File Name:" << obj.file << std::endl;
           
           if(auto* m = loadModel(obj.file, obj)){
@@ -50,9 +51,9 @@ extern "C" int main(int ac, char **av)
             std::cerr << "WARNING: failed to load model: " << obj.file << std::endl;
           }
       }
-      if(models.empty()) {
-        throw std::runtime_error("no model loaded");
-      }
+      // if(models.empty()) {
+      //   throw std::runtime_error("no model loaded");
+      // }
 
       // 環境マップの指定
       std::string envMapFileName;

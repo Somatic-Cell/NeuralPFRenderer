@@ -10,27 +10,33 @@
 
 extern "C" __global__ void __anyhit__radiance_rgb()
 {
-    const TriangleMeshSBTData &sbtData =*(const TriangleMeshSBTData*) optixGetSbtDataPointer();
+    const HitgroupSBTData &sbtData =*(const HitgroupSBTData*) optixGetSbtDataPointer();
+
+    const uint32_t meshIndex = sbtData.tri.meshIndex;
+    const uint32_t materialIndex = sbtData.tri.materialIndex;
+    const TriangleMeshGeomData &mesh = optixLaunchParams.meshes[meshIndex];
+    const MaterialData & material = optixLaunchParams.materials[materialIndex];
+  
     PRDRGB &prd = *getPRD<PRDRGB>();
     
     float opacity = 1.0f;     
-    if(sbtData.diffuseTexture.hasTexture){
+    if(material.diffuseTexture.texture > 0){
         // 基本的な交差点の情報を取得
         const int primID = optixGetPrimitiveIndex();
-        const uint3 index = sbtData.index[primID];
+        const uint3 index = mesh.index[primID];
         const float u = optixGetTriangleBarycentrics().x;
         const float v = optixGetTriangleBarycentrics().y;
 
         // Diffuse テクスチャ座標を取得
-        const float2 &UVDiffuse1 = sbtData.diffuseTexcoord[index.x];
-        const float2 &UVDiffuse2 = sbtData.diffuseTexcoord[index.y];
-        const float2 &UVDiffuse3 = sbtData.diffuseTexcoord[index.z];
+        const float2 &UVDiffuse1 = mesh.texcoord[index.x];
+        const float2 &UVDiffuse2 = mesh.texcoord[index.y];
+        const float2 &UVDiffuse3 = mesh.texcoord[index.z];
 
         const float2 diffuseTextureCoordinate = (1.0f - u - v) * UVDiffuse1
             + u * UVDiffuse2
             + v * UVDiffuse3;
 
-        opacity = tex2D<float4>(sbtData.diffuseTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y).w;
+        opacity = tex2D<float4>(material.diffuseTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y).w;
     }
 
     if(opacity < 1.0f && opacity <= prd.random()){
@@ -42,27 +48,33 @@ extern "C" __global__ void __anyhit__radiance_rgb()
 
 extern "C" __global__ void __anyhit__radiance_spectral()
 {
-    const TriangleMeshSBTData &sbtData =*(const TriangleMeshSBTData*) optixGetSbtDataPointer();
+    const HitgroupSBTData &sbtData =*(const HitgroupSBTData*) optixGetSbtDataPointer();
+
+    const uint32_t meshIndex = sbtData.tri.meshIndex;
+    const uint32_t materialIndex = sbtData.tri.materialIndex;
+    const TriangleMeshGeomData &mesh = optixLaunchParams.meshes[meshIndex];
+    const MaterialData & material = optixLaunchParams.materials[materialIndex];
+
     PRDSpectral &prd = *getPRD<PRDSpectral>();
     
     float opacity = 1.0f;     
-    if(sbtData.diffuseTexture.hasTexture){
+    if(material.diffuseTexture.texture > 0){
         // 基本的な交差点の情報を取得
         const int primID = optixGetPrimitiveIndex();
-        const uint3 index = sbtData.index[primID];
+        const uint3 index = mesh.index[primID];
         const float u = optixGetTriangleBarycentrics().x;
         const float v = optixGetTriangleBarycentrics().y;
 
         // Diffuse テクスチャ座標を取得
-        const float2 &UVDiffuse1 = sbtData.diffuseTexcoord[index.x];
-        const float2 &UVDiffuse2 = sbtData.diffuseTexcoord[index.y];
-        const float2 &UVDiffuse3 = sbtData.diffuseTexcoord[index.z];
+        const float2 &UVDiffuse1 = mesh.texcoord[index.x];
+        const float2 &UVDiffuse2 = mesh.texcoord[index.y];
+        const float2 &UVDiffuse3 = mesh.texcoord[index.z];
 
         const float2 diffuseTextureCoordinate = (1.0f - u - v) * UVDiffuse1
             + u * UVDiffuse2
             + v * UVDiffuse3;
 
-        opacity = tex2D<float4>(sbtData.diffuseTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y).w;
+        opacity = tex2D<float4>(material.diffuseTexture.texture, diffuseTextureCoordinate.x, 1.0f - diffuseTextureCoordinate.y).w;
     }
 
     if(opacity < 1.0f && opacity <= prd.random()){

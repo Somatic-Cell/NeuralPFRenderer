@@ -159,7 +159,6 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
 
         prd.position = ray.org;
         prd.wi = ray.dir;
-
         
 
         while(prd.bounce < optixLaunchParams.frame.maxBounce)

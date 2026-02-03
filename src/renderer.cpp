@@ -47,7 +47,7 @@ struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) CallableRecord
 struct __align__( OPTIX_SBT_RECORD_ALIGNMENT ) HitgroupRecord
 {
     __align__( OPTIX_SBT_RECORD_ALIGNMENT ) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-    TriangleMeshSBTData data;
+    HitgroupSBTData data;
 };
 
 
@@ -67,6 +67,8 @@ Renderer::Renderer(std::vector<const Model*> models, sceneIO::Scene sceneDesc) :
     m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_GLASS)]         = std::string("glass_bsdf.optixir");
     m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)]        = std::string("light_sample.optixir");
     m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LENS)]               = std::string("lens.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_IS_VDB)]             = std::string("intersection_vdb.optixir");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_VDB_RADIANCE)]    = std::string("ch_radiance_vdb.optixir");
 #else
     m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_RAYGEN)]             = std::string("raygen.ptx");
     m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_RADIANCE)]        = std::string("ah_radiance.ptx");
@@ -80,6 +82,8 @@ Renderer::Renderer(std::vector<const Model*> models, sceneIO::Scene sceneDesc) :
     m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_BXDF_GLASS)]         = std::string("glass_bsdf.ptx");
     m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)]        = std::string("light_sample.ptx");
     m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LENS)]               = std::string("lens.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_IS_VDB)]             = std::string("intersection_vdb.ptx");
+    m_optixModuleFileNames[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_VDB_RADIANCE)]    = std::string("ch_radiance_vdb.ptx");
 #endif
     
     m_cudaModuleFileNames.resize(static_cast<int>(PostProcessCudaModuleIdentifier::NUM_CUDA_MODULE_IDENTIFIERS));
@@ -107,18 +111,26 @@ Renderer::Renderer(std::vector<const Model*> models, sceneIO::Scene sceneDesc) :
     std::cout << "# Atmospheric RT: creating hitgroup programs ..." << std::endl;
     createHitgroupPrograms();
 
-    buildAccel();
-    m_launchParams.traversable = m_iasHandle;
-
     std::cout << "# Atmospheric RT: setting up OptiX pipeline ..." << std::endl;
     createPipeline();
     
-    createTextures();
+    
+    std::cout << "# Atmospheric RT: load VDB data..." << std::endl;
+    loadVDB();
+
+    std::cout << "# Atmospheric RT: Building accelelation structure..." << std::endl;
+    buildAccel();
+    m_launchParams.traversable = m_iasHandle;
+
+    std::cout << "# Atmospheric RT: Loading assets to GPU..." << std::endl;
+    loadAssets();
 
     std::cout << "# Atmospheric RT: building shader binding table..." << std::endl;
     buildSBT();
 
-    m_launchParamsBuffer.alloc(sizeof(m_launchParams)); // alloc だけ？
+    createTextures();
+    
+    m_launchParamsBuffer.alloc(sizeof(m_launchParams)); 
     std::cout << "# Atmospheric RT: context, module, pipeline, etc, all set up ..." << std::endl;
     std::cout << "# Atmospheric RT: Optix 8 fully set up..." << std::endl;
 
@@ -200,6 +212,10 @@ bool Renderer::buildAccel()
         PRINT(mdl->meshes.size());
     }
 
+    bool hasVDB = m_hasVDB;
+    const int numVDBInstances = hasVDB ? 1 : 0;
+    const int numInstances = numMeshes + numVDBInstances;
+
     m_vertexBuffer.resize(numMeshes);
     m_indexBuffer.resize(numMeshes);
     m_normalBuffer.resize(numMeshes);
@@ -213,7 +229,7 @@ bool Renderer::buildAccel()
     m_gasHandle.resize(numMeshes);
   
     // ===========================
-    // GAS (BLAS) を構築　（メッシュごとに 1 つ）
+    // メッシュの GAS (BLAS) を構築　（メッシュごとに 1 つ）
     // ===========================
     std::vector<mymath::matrix3x4> objectMatrix(numMeshes);
     std::vector<mymath::matrix3x3> normalMatrix(numMeshes);
@@ -372,20 +388,133 @@ bool Renderer::buildAccel()
         }
     }
 
-    m_objectMatrix.allocAndUpload(objectMatrix);
-    m_normalMatrix.allocAndUpload(normalMatrix);
-    m_launchParams.frame.objectMatrixBuffer = (mymath::matrix3x4*)m_objectMatrix.getDevicePointer();
-    m_launchParams.frame.normalMatrixBuffer = (mymath::matrix3x3*)m_normalMatrix.getDevicePointer();
+    if(numMeshes > 0){
+        m_objectMatrix.allocAndUpload(objectMatrix);
+        m_normalMatrix.allocAndUpload(normalMatrix);
+        m_launchParams.frame.objectMatrixBuffer = (mymath::matrix3x4*)m_objectMatrix.getDevicePointer();
+        m_launchParams.frame.normalMatrixBuffer = (mymath::matrix3x3*)m_normalMatrix.getDevicePointer();
+    } else {
+        m_launchParams.frame.objectMatrixBuffer = nullptr;
+        m_launchParams.frame.normalMatrixBuffer = nullptr;
+    }
     
 
+    // ===========================
+    // VDBの GAS (BLAS) を構築
+    // ===========================
+    if(hasVDB){
+        OptixBuildInput vdbInput = {};
+        vdbInput.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+
+        CUdeviceptr d_aabb = m_vdbAABBBuffer.getDevicePointer();
+        vdbInput.customPrimitiveArray.aabbBuffers = &d_aabb;
+        vdbInput.customPrimitiveArray.numPrimitives = 1;
+
+        uint32_t vdbInputFlags = OPTIX_GEOMETRY_FLAG_NONE;
+        vdbInput.customPrimitiveArray.flags                         = & vdbInputFlags;
+        vdbInput.customPrimitiveArray.numSbtRecords                 = 1;
+        vdbInput.customPrimitiveArray.sbtIndexOffsetBuffer          = 0;
+        vdbInput.customPrimitiveArray.sbtIndexOffsetSizeInBytes     = 0;
+        vdbInput.customPrimitiveArray.sbtIndexOffsetStrideInBytes   = 0;
+
+        OptixAccelBuildOptions vdbAccelOptions = {};
+        vdbAccelOptions.buildFlags = OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
+        if(getNumDevices() == 1){
+            // 複数 GPU を使うと性能が悪化する恐れがあるため，単一 GPU の場合のみオプションを追加
+            vdbAccelOptions.buildFlags             |= OPTIX_BUILD_FLAG_PREFER_FAST_TRACE;
+        }
+        vdbAccelOptions.motionOptions.numKeys      = 1;    // モーションブラーなし． numKeys > 1 でブラー補間
+        vdbAccelOptions.operation                  = OPTIX_BUILD_OPERATION_BUILD; // 新規構築． ..._UPDATE を使うと更新
+
+        // AS に必要なバッファサイズの見積もり
+        OptixAccelBufferSizes vdbGasBufferSizes;
+        OPTIX_CHECK(
+            optixAccelComputeMemoryUsage(
+                m_optixContext,
+                &vdbAccelOptions,
+                &vdbInput,
+                1,              // メッシュの個数．今回は1個ずつ作成しているので1
+                &vdbGasBufferSizes
+            )
+        );
+
+        // Compaction の準備
+        // AS を最悪のケースを想定して作るので，作成後に不要となった部分を圧縮することで VRAM を節約可能
+        
+        CUDABuffer compactedSizeVDBBuffer;
+        compactedSizeVDBBuffer.alloc(sizeof(uint64_t));
+
+        OptixAccelEmitDesc vdbEmitDesc = {};                   // AS 構築時の圧縮後サイズ，AABB の範囲，インスタンスの変換行列... を出力してくれる補助出力の構造体
+        vdbEmitDesc.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE; // 圧縮後のサイズを返すように指定
+        vdbEmitDesc.result = compactedSizeVDBBuffer.getDevicePointer();
+
+        // GAS の構築
+        CUDABuffer tempVDBGASBuffer;
+        tempVDBGASBuffer.alloc(vdbGasBufferSizes.tempSizeInBytes);
+
+        CUDABuffer outputVDBGASBuffer;
+        outputVDBGASBuffer.alloc(vdbGasBufferSizes.outputSizeInBytes);
+
+        OPTIX_CHECK(
+            optixAccelBuild(
+                m_optixContext,
+                0, // stream
+                &vdbAccelOptions,
+                &vdbInput,
+                1,              // メッシュの個数．今回は1個ずつ作成しているので1
+                
+                // temp
+                tempVDBGASBuffer.getDevicePointer(),
+                tempVDBGASBuffer.getSizeInBytes(),
+
+                // output
+                outputVDBGASBuffer.getDevicePointer(),
+                outputVDBGASBuffer.getSizeInBytes(),
+
+                &m_vdbGASHandle,
+
+                &vdbEmitDesc, 1
+            )
+        );
+
+        CUDA_SYNC_CHECK();
+        // Compaction の実行
+        uint64_t compactedVDBBufferSize = 0;
+        compactedSizeVDBBuffer.download(&compactedVDBBufferSize, 1);
+        m_vdbGASBuffer.alloc(compactedVDBBufferSize);
+        OPTIX_CHECK(
+            optixAccelCompact(
+                m_optixContext,
+                0,
+                m_vdbGASHandle,
+                m_vdbGASBuffer.getDevicePointer(),
+                m_vdbGASBuffer.getSizeInBytes(),
+                &m_vdbGASHandle
+            )
+        );
+
+        CUDA_SYNC_CHECK();
+
+        // クリーンアップ
+        outputVDBGASBuffer.free();
+        tempVDBGASBuffer.free();
+        compactedSizeVDBBuffer.free();
+    }
     
     // ==========================
     // IAS (TLAS) の構築
     // ==========================
 
     std::cout << "Building IAS..." << std::endl;
-    std::vector<OptixInstance> instances(numMeshes);
 
+    if (numInstances == 0) {
+        m_iasHandle = 0;
+        return true;
+    }
+
+    std::vector<OptixInstance> instances(numInstances);
+
+    // mesh instances [0, ..., numMeshes - 1]
     for(unsigned int meshID = 0; meshID < numMeshes; meshID++){
         OptixInstance & inst = instances[meshID];
         memset(&inst, 0, sizeof(OptixInstance));
@@ -402,12 +531,34 @@ bool Renderer::buildAccel()
         inst.instanceId     = meshID;
         inst.sbtOffset      = meshID * RAY_TYPE_COUNT;
         inst.visibilityMask = 255;
-        inst.flags          = OPTIX_INSTANCE_FLAG_NONE;     // インスタンスの挙動を指定．
+        inst.flags          = OPTIX_INSTANCE_FLAG_DISABLE_ANYHIT;     // インスタンスの挙動を指定．
                                                             // OPTIX_INSTNCE_FLAG_NONE:                 デフォルト
                                                             // OPTIX_INSTNCE_FLAG_DISABLE_TRANSFORM:    transform 行列を無視 (ワールド座標に直置き)
                                                             // OPTIX_INSTNCE_FLAG_DISABLE_ANYHIT:       AnyHit シェーダを無視
                                                             // OPTIX_INSTNCE_FLAG_ENFORCE_ANYHIT:       AnyHit シェーダを必ず呼ぶ
         inst.traversableHandle  = m_gasHandle[meshID];
+    }
+
+    // vdb instance
+    if(hasVDB) {
+        const int vdbInstanceID = numMeshes;
+        OptixInstance & inst = instances[vdbInstanceID];
+        memset(&inst, 0, sizeof(OptixInstance));
+        float transform[12] = {
+            1.0f, 0.0f, 0.0f, 0.0f, 
+            0.0f, 1.0f, 0.0f, 0.0f, 
+            0.0f, 0.0f, 1.0f, 0.0f, 
+        };
+        memcpy(inst.transform, transform, sizeof(float) * 12);
+        inst.instanceId     = vdbInstanceID;
+        inst.sbtOffset      = vdbInstanceID * RAY_TYPE_COUNT;
+        inst.visibilityMask = 255;
+        inst.flags          = OPTIX_INSTANCE_FLAG_NONE;     // インスタンスの挙動を指定．
+                                                            // OPTIX_INSTNCE_FLAG_NONE:                 デフォルト
+                                                            // OPTIX_INSTNCE_FLAG_DISABLE_TRANSFORM:    transform 行列を無視 (ワールド座標に直置き)
+                                                            // OPTIX_INSTNCE_FLAG_DISABLE_ANYHIT:       AnyHit シェーダを無視
+                                                            // OPTIX_INSTNCE_FLAG_ENFORCE_ANYHIT:       AnyHit シェーダを必ず呼ぶ
+        inst.traversableHandle  = m_vdbGASHandle;
     }
 
     m_instance.allocAndUpload(instances);
@@ -589,6 +740,7 @@ void Renderer::createOptiXModule()
     m_pipelineCompileOptions.usesMotionBlur         = false;                        // モーションブラーなし
     m_pipelineCompileOptions.numPayloadValues       = 2;                            // payload のスロット数．
     m_pipelineCompileOptions.numAttributeValues     = 2;                            // ヒットしたプリミティブから返される補助情報数．例えば，重心座標 (u, v)
+                                                                                    // プリミティブの中で，必要な attr の最大個数を指定すればよい．
     m_pipelineCompileOptions.exceptionFlags         =                               // 例外処理を有効化するフラグ
         OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW                                             // コールスタックが溢れた場合の例外
         | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH                                              // 最大再帰深度を超えた場合に発生する例外をキャッチ
@@ -711,51 +863,82 @@ void Renderer::createMissPrograms()
 
 void Renderer::createHitgroupPrograms()
 {
-    m_hitgroupPrograms.resize(RAY_TYPE_COUNT);
+    // mesh
+    m_hitgroupProgramsMesh.resize(RAY_TYPE_COUNT);
+    m_hitgroupProgramsVDB.resize(RAY_TYPE_COUNT);
 
-    OptixProgramGroupOptions    pgOptions   = {};
-    OptixProgramGroupDesc       pgDesc      = {};
-    pgDesc.kind                             = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
-    pgDesc.hitgroup.moduleCH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_RADIANCE)];
-    pgDesc.hitgroup.moduleAH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_RADIANCE)];
 
     char log[2048];
-    size_t sizeOfLog = sizeof(log);
-    
-    // radiance ray の登録
-    if(m_sceneDesc.integrator.applySpectralRendering){
-        pgDesc.hitgroup.entryFunctionNameCH = "__closesthit__radiance_spectral";
-        pgDesc.hitgroup.entryFunctionNameAH = "__anyhit__radiance_spectral";
-    } else {
-        pgDesc.hitgroup.entryFunctionNameCH = "__closesthit__radiance_rgb";
-        pgDesc.hitgroup.entryFunctionNameAH = "__anyhit__radiance_rgb";
-    }
-    OPTIX_CHECK(optixProgramGroupCreate(m_optixContext,
+
+    auto createHG = [&](OptixProgramGroup& out, 
+                        OptixModule ch, const char* chName,
+                        OptixModule ah, const char* ahName,
+                        OptixModule is, const char* isName
+                    )
+    {
+        OptixProgramGroupOptions    pgOptions   = {};
+        OptixProgramGroupDesc       pgDesc      = {};
+        pgDesc.kind                             = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
+        
+        pgDesc.hitgroup.moduleCH                = ch;
+        pgDesc.hitgroup.entryFunctionNameCH     = chName;
+
+        pgDesc.hitgroup.moduleAH                = ah;
+        pgDesc.hitgroup.entryFunctionNameAH     = ahName;
+        
+        pgDesc.hitgroup.moduleIS                = is;
+        pgDesc.hitgroup.entryFunctionNameIS     = isName;
+
+        size_t sizeOfLog = sizeof(log);
+        OPTIX_CHECK(optixProgramGroupCreate(m_optixContext,
                                         &pgDesc,
                                         1,
                                         &pgOptions,
                                         log,
                                         &sizeOfLog,
-                                        &m_hitgroupPrograms[RADIANCE_RAY_TYPE]
+                                        &out
                                         ));
-    if (sizeOfLog > 1) PRINT(log);
-
-    // shadow ray の登録
-    pgDesc.hitgroup.moduleCH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_SHADOW)];
-    pgDesc.hitgroup.moduleAH                = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_SHADOW)];
+        if (sizeOfLog > 1) PRINT(log);
+    };
     
-    pgDesc.hitgroup.entryFunctionNameCH = "__closesthit__shadow";
-    pgDesc.hitgroup.entryFunctionNameAH = "__anyhit__shadow";
+    // Mesh: radiance
+    const char* chRadiance = m_sceneDesc.integrator.applySpectralRendering
+        ? "__closesthit__radiance_spectral"
+        : "__closesthit__radiance_rgb";
+    const char* ahRadiance = m_sceneDesc.integrator.applySpectralRendering
+        ? "__anyhit__radiance_spectral"
+        : "__anyhit__radiance_rgb";
+    
+    createHG(m_hitgroupProgramsMesh[RADIANCE_RAY_TYPE],
+        m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_RADIANCE)], chRadiance,
+        m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_RADIANCE)], ahRadiance,
+        /*IS*/ nullptr, /*IS name*/ nullptr
+    );
 
-    OPTIX_CHECK(optixProgramGroupCreate(m_optixContext,
-                                        &pgDesc,
-                                        1,
-                                        &pgOptions,
-                                        log,
-                                        &sizeOfLog,
-                                        &m_hitgroupPrograms[SHADOW_RAY_TYPE]
-                                        ));
-    if (sizeOfLog > 1) PRINT(log);
+    // Mesh: shadow
+    createHG(m_hitgroupProgramsMesh[SHADOW_RAY_TYPE],
+        m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_SHADOW)], "__closesthit__shadow",
+        m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_SHADOW)], "__anyhit__shadow",
+        /*IS*/ nullptr, /*IS name*/ nullptr
+    );
+
+    // VDB: radiance
+    const char* chVDBRadiance = m_sceneDesc.integrator.applySpectralRendering
+        ? "__closesthit__vdb_radiance_spectral"
+        : "__closesthit__vdb_radiance_rgb";
+
+    createHG(m_hitgroupProgramsVDB[RADIANCE_RAY_TYPE],
+        m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_VDB_RADIANCE)], chVDBRadiance,
+        /*AH*/ nullptr, /*AH name*/ nullptr,
+        m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_IS_VDB)], "__intersection__vdb"
+    );
+
+    // VDB: shadow
+    createHG(m_hitgroupProgramsVDB[SHADOW_RAY_TYPE],
+        m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_CH_SHADOW)], "__closesthit__shadow",
+        m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_AH_SHADOW)], "__anyhit__shadow",
+        m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_IS_VDB)], "__intersection__vdb"
+    );
 }
 
 void Renderer::createCallablePrograms()
@@ -891,7 +1074,11 @@ void Renderer::createPipeline()
     {
         programGroups.push_back(pg);
     }
-    for(auto pg : m_hitgroupPrograms)
+    for(auto pg : m_hitgroupProgramsMesh)
+    {
+        programGroups.push_back(pg);
+    }
+    for(auto pg : m_hitgroupProgramsVDB)
     {
         programGroups.push_back(pg);
     }
@@ -934,11 +1121,12 @@ void Renderer::createPipeline()
 
 void Renderer::buildSBT()
 {
+    std::cout << "#Atmospheric RT: Raygen records" << std::endl;
     // Raygen records の登録
     std::vector<RaygenRecord> raygenRecords;
     for(int i = 0; i < m_raygenPrograms.size(); i++)
     {
-        RaygenRecord rec;
+        RaygenRecord rec = {};
         OPTIX_CHECK(optixSbtRecordPackHeader(m_raygenPrograms[i], &rec));   // RaygenRecord.header に， m_raygenPrograms[i] を登録
         rec.data = nullptr;
         raygenRecords.push_back(rec);
@@ -947,10 +1135,11 @@ void Renderer::buildSBT()
     m_sbt.raygenRecord  = m_raygenRecordsBuffer.getDevicePointer();   // raygenRecords バッファのデバイス上の先頭アドレスを sbt に登録
 
     // Miss records の登録
+    std::cout << "#Atmospheric RT: Miss records" << std::endl;
     std::vector<MissRecord> missRecords;
     for(int i = 0; i < m_missPrograms.size(); i++)
     {
-        MissRecord rec;
+        MissRecord rec = {};
         OPTIX_CHECK(optixSbtRecordPackHeader(m_missPrograms[i], &rec));   // MissRecord.header に， m_missPrograms[i] を登録
         rec.data = nullptr;
         missRecords.push_back(rec);
@@ -961,9 +1150,10 @@ void Renderer::buildSBT()
     m_sbt.missRecordCount           = (int)missRecords.size();
 
     // Callables records の登録
+    std::cout << "#Atmospheric RT: Callable records" << std::endl;
     std::vector<CallableRecord> callableRecords;
     for(int i =0; i < m_callablePrograms.size(); i++){
-        CallableRecord rec;
+        CallableRecord rec = {};
         OPTIX_CHECK(optixSbtRecordPackHeader(m_callablePrograms[i], &rec));   // CallableRecord.header に， m_callablePrograms[i] を登録
         rec.data = nullptr;
         callableRecords.push_back(rec);
@@ -974,79 +1164,49 @@ void Renderer::buildSBT()
     m_sbt.callablesRecordCount           = (int)callableRecords.size();
 
     // Hitgroup records の登録
+    std::cout << "#Atmospheric RT: Hitgroup records" << std::endl;
     // size_t numObjects = 0;
     // for(auto* mdl: m_models) numObjects += mdl->meshes.size();
     std::vector<HitgroupRecord> hitgroupRecords;
 
+    const int numMeshes = (int)m_meshTable.size();
+    const int numInstances = numMeshes + (m_hasVDB ? 1 : 0);
+    hitgroupRecords.reserve(numInstances * RAY_TYPE_COUNT);
+
+
+    std::cout << "#Atmospheric RT: Hitgroup records (mesh)" << std::endl;
     size_t flat = 0;
-    int numTextures = 0;
-    unsigned int modelIndex = 0;
     for(auto* mdl: m_models){
         for(int meshID = 0; meshID < mdl->meshes.size(); ++meshID, ++flat)
         {
-            auto mesh = mdl->meshes[meshID];
             for(int rayID = 0; rayID < RAY_TYPE_COUNT; ++rayID)
             {
-                HitgroupRecord rec;
-                OPTIX_CHECK(optixSbtRecordPackHeader(m_hitgroupPrograms[rayID], &rec));   // HitgroupRecord.header に， m_hitgroupPrograms[rayID] を登録
-                // 幾何情報の登録
-                rec.data.vertex             = (float3*)m_vertexBuffer[flat].getDevicePointer();
-                rec.data.index              = (uint3*)m_indexBuffer[flat].getDevicePointer();
-                rec.data.normal             = (float3*)m_normalBuffer[flat].getDevicePointer();
-                rec.data.tangent            = (float4*)m_tangentBuffer[flat].getDevicePointer();
-                rec.data.diffuseTexcoord    = (float2*)m_diffuseTexcoordBuffer[flat].getDevicePointer();
-                rec.data.normalTexcoord     = (float2*)m_normalTexcoordBuffer[flat].getDevicePointer();
-                rec.data.emissiveTexcoord   = (float2*)m_emissiveTexcoordBuffer[flat].getDevicePointer();
-                rec.data.hasTangent         = mesh->hasTangentSpace;
-                rec.data.hasNormal          = mesh->hasNormal;
-                rec.data.instanceID         = flat;
-
+                HitgroupRecord rec = {};
+                OPTIX_CHECK(optixSbtRecordPackHeader(m_hitgroupProgramsMesh[rayID], &rec));   // HitgroupRecord.header に， m_hitgroupProgramsMesh[rayID] を登録
                 
-                // Material 情報の登録
-                int materialID = mesh->materialID;
-                if(materialID >= 0){
-                    auto material = mdl->materials[materialID];
-                    rec.data.roughness  = material->roughness;
-                    rec.data.metallic   = material->metallic;
-                    rec.data.emissive   = material->emissive;
-                    rec.data.color      = material->diffuse;
-                    // Material Type
-                    if(material->isLight){
-                        rec.data.materialType = MATERIAL_TYPE_LIGHT;
-                    } else if (material->isGlass){
-                        rec.data.materialType = MATERIAL_TYPE_GLASS;
-                    } else if (material->rmTextureID >= 0){
-                        rec.data.materialType = MATERIAL_TYPE_PRINCIPLED_BRDF;
-                    } else {
-                        rec.data.materialType = MATERIAL_TYPE_DIFFUSE;
-                    }
-                    // Texture の登録
-                    if(material->diffuseTextureID >= 0){
-                        rec.data.diffuseTexture.hasTexture  = true;
-                        rec.data.diffuseTexture.texture     = m_textureObjects[numTextures + material->diffuseTextureID];
-                    } 
-                    if(material->normalTextureID >= 0){
-                        rec.data.normalTexture.hasTexture   = true;
-                        rec.data.normalTexture.texture      = m_textureObjects[numTextures + material->normalTextureID];
-                    }
-                    if(material->rmTextureID >= 0){
-                        rec.data.rmTexture.hasTexture       = true;
-                        rec.data.rmTexture.texture          = m_textureObjects[numTextures + material->rmTextureID];
-                    }
-                    if(material->emissiveTextureID >= 0){
-                        rec.data.emissiveTexture.hasTexture  = true;
-                        rec.data.emissiveTexture.texture      = m_textureObjects[numTextures + material->emissiveTextureID];
-                    }
-
-                }
+                rec.data.geomType           = GeomType::Triangle;
+                rec.data.tri.meshIndex      = static_cast<uint32_t>(flat);
+                rec.data.tri.materialIndex  = m_meshMaterialIndex[static_cast<uint32_t>(flat)];
+                
                 hitgroupRecords.push_back(rec);
             }
         }
-        numTextures +=(int)mdl->textures.size();
-        ++modelIndex;
     }
-    
-    
+
+    std::cout << "#Atmospheric RT: Hitgroup records (vdb)" << std::endl;
+    if(m_hasVDB){
+        // const int vdbInstanceID = flat + 1;
+        for(int rayID = 0; rayID < RAY_TYPE_COUNT; ++rayID){
+            HitgroupRecord rec = {};
+            OPTIX_CHECK(optixSbtRecordPackHeader(m_hitgroupProgramsVDB[rayID], &rec));   // HitgroupRecord.header に， m_hitgroupPrograms[rayID] を登録
+            // 幾何情報の登録
+            rec.data.geomType       = GeomType::VDB;
+            rec.data.vdb.vdbIndex   = 0;
+
+            hitgroupRecords.push_back(rec);
+        }
+    }
+
     m_hitgroupRecordsBuffer.allocAndUpload(hitgroupRecords);                        // GPU に情報を転送
     m_sbt.hitgroupRecordBase            = m_hitgroupRecordsBuffer.getDevicePointer();    // hitgroupRecords バッファのデバイス上の先頭アドレスを sbt に登録
     m_sbt.hitgroupRecordStrideInBytes   = sizeof(HitgroupRecord);                   // 
@@ -1464,7 +1624,6 @@ void Renderer::createLightTable()
                     triangleLightData.uv0 = mesh.emissiveTexcoord[index.x];
                     triangleLightData.uv1 = mesh.emissiveTexcoord[index.y];
                     triangleLightData.uv2 = mesh.emissiveTexcoord[index.z];
-                    triangleLightData.emissiveTexture.hasTexture = hasEmissiveTexture;
                     if(hasEmissiveTexture){
                         triangleLightData.emissiveTexture.texture = m_textureObjects[material.emissiveTextureID];
                     }
@@ -1712,4 +1871,175 @@ float Renderer::getWavelengthMin() const
 float Renderer::getWavelengthMax() const
 {
     return m_wavelengthMax;
+}
+
+void Renderer::loadVDB()
+{
+    m_vdbAssets = std::make_shared<NanoVDBVolumeAsset>();
+    for(const auto& obj : m_sceneDesc.objects){
+        if(obj.type == "vdb"){
+
+            std::filesystem::path exePath;
+            char pathBuffer[MAX_PATH] = {};
+#if defined(_WIN32)
+            if(GetModuleFileNameA(NULL, pathBuffer, MAX_PATH) == 0){
+                std::cerr << "ERROR: GetModuleFileNameA failed" << std::endl;
+            }
+    exePath = std::filesystem::path(pathBuffer);
+#else
+            ssize_t count = readlink("/proc/self/exe", exePath, PATH_MAX);
+            if(count == -1) {
+                std::cerr << "ERROR: readlink() failed" << std::endl;
+            }
+#endif
+            std::filesystem::path vdbDir = exePath.parent_path().parent_path().parent_path().parent_path() / "model/vdb" / obj.file;
+            std::cout << "VDB Path:" << vdbDir << std::endl;
+            m_vdbAssets->loadAllFloatGrids(vdbDir.string());
+            float bMin[3];
+            float bMax[3];
+
+            const auto& grids = m_vdbAssets->m_grids;
+            const NanoVDBGrid& grid = grids.begin()->second;
+
+            std::copy(grid.worldMin.begin(), grid.worldMin.end(), bMin);
+            std::copy(grid.worldMax.begin(), grid.worldMax.end(), bMax);
+            OptixAabb aabb = {bMin[0], bMin[1], bMin[2], bMax[0], bMax[1], bMax[2]};
+            std::vector<OptixAabb> h_aabb;
+            h_aabb.push_back(aabb);
+            m_vdbAABBBuffer.allocAndUpload(h_aabb);
+            m_hasVDB = true;
+            m_launchParams.vdbAABBs = (OptixAabb*)m_vdbAABBBuffer.getDevicePointer();
+        }
+    }
+
+}
+
+void Renderer::loadAssets()
+{
+    // -----------------
+    // mesh data
+    // -----------------
+
+    int numMeshes = 0;
+    int numMaterials = 0;
+    for(auto* mdl : m_models) {
+        numMeshes +=(int)mdl->meshes.size();
+        numMaterials +=(int)mdl->materials.size();
+        PRINT(mdl->meshes.size());
+        PRINT(mdl->materials.size());
+    }
+
+    m_meshTable.clear();
+    m_meshMaterialIndex.clear();
+    m_materialTable.clear();
+
+    m_meshTable.resize(numMeshes);
+    m_meshMaterialIndex.resize(numMeshes);
+
+    m_materialTable.reserve(numMaterials);
+    
+    size_t flat = 0;
+    int numTextures = 0;
+    unsigned int materialBase = 0;
+    
+    for(auto* mdl: m_models){
+        materialBase = (unsigned int)m_materialTable.size();
+        // mesh の格納
+        for(int meshID = 0; meshID < mdl->meshes.size(); ++meshID, ++flat)
+        {
+            auto mesh = mdl->meshes[meshID];
+            // 幾何情報の登録
+            m_meshTable[flat].vertex            = (float3*)m_vertexBuffer[flat].getDevicePointer();
+            m_meshTable[flat].index             = (uint3*)m_indexBuffer[flat].getDevicePointer();
+            m_meshTable[flat].normal            = (float3*)m_normalBuffer[flat].getDevicePointer();
+            m_meshTable[flat].tangent           = (float4*)m_tangentBuffer[flat].getDevicePointer();
+            m_meshTable[flat].texcoord          = (float2*)m_diffuseTexcoordBuffer[flat].getDevicePointer();
+            m_meshTable[flat].hasTangent        = mesh->hasTangentSpace;
+            m_meshTable[flat].hasNormal         = mesh->hasNormal;
+            
+            int materialID = mesh->materialID;
+            m_meshMaterialIndex[flat] = (materialID >= 0) ? (materialBase + (unsigned int)materialID) : 0;
+        }
+
+        // material の格納
+        materialBase = (unsigned int)m_materialTable.size();
+        for(auto* mat : mdl->materials){
+            MaterialData matData{};
+            
+            matData.color       = mat->diffuse;
+            matData.roughness   = mat->roughness;
+            matData.metallic    = mat->metallic;
+            matData.emissive    = mat->emissive;
+
+            // material type
+            if(mat->isLight){
+                matData.materialType = MATERIAL_TYPE_LIGHT;
+            } else if (mat->isGlass){
+                matData.materialType = MATERIAL_TYPE_GLASS;
+            } else if (mat->rmTextureID >= 0){
+                matData.materialType = MATERIAL_TYPE_PRINCIPLED_BRDF;
+            } else {
+                matData.materialType = MATERIAL_TYPE_DIFFUSE;
+            }
+
+            // Texture
+            if(mat->diffuseTextureID >= 0){
+                matData.diffuseTexture.texture     = m_textureObjects[numTextures + mat->diffuseTextureID];
+            } 
+            if(mat->normalTextureID >= 0){
+                matData.normalTexture.texture      = m_textureObjects[numTextures + mat->normalTextureID];
+            }
+            if(mat->rmTextureID >= 0){
+                matData.rmTexture.texture          = m_textureObjects[numTextures + mat->rmTextureID];
+            }
+            if(mat->emissiveTextureID >= 0){
+                matData.emissiveTexture.texture      = m_textureObjects[numTextures + mat->emissiveTextureID];
+            }
+
+            m_materialTable.push_back(matData);
+
+        }
+
+        numTextures +=(int)mdl->textures.size();
+    }
+
+    // GPU にアップロード
+    m_meshTableBuffer.allocAndUpload(m_meshTable);
+    m_materialTableBuffer.allocAndUpload(m_materialTable);
+
+    // launch params に登録
+    m_launchParams.meshes = (TriangleMeshGeomData *)m_meshTableBuffer.getDevicePointer();
+    m_launchParams.numMeshes = (int)m_meshTable.size();
+
+    m_launchParams.materials = (MaterialData*)m_materialTableBuffer.getDevicePointer();
+    m_launchParams.numMaterials = (int)m_materialTable.size();
+
+    // -----------------
+    // vdb data
+    // -----------------
+    
+    m_vdbTable.clear();
+
+    if(!m_hasVDB || !m_vdbAssets){
+        m_launchParams.vdbs = nullptr;
+        m_launchParams.numVDBs = 0;
+        return;
+    }
+
+    const auto& grids = m_vdbAssets->m_grids;
+    const NanoVDBGrid& grid = grids.begin()->second;
+    
+    VDBGeomData vdbData {};
+    vdbData.nanoGrid        = grid.deviceGridPtr();
+    vdbData.densityScale    = 1.0f;
+    vdbData.emissionScale   = 1.0f;
+
+    m_vdbTable.push_back(vdbData);
+    
+    // GPU にアップロード
+    m_vdbTableBuffer.allocAndUpload(m_vdbTable);
+
+    // launch params に登録
+    m_launchParams.vdbs = (VDBGeomData*)m_vdbTableBuffer.getDevicePointer();
+    m_launchParams.numVDBs = (int)m_vdbTable.size();
 }
