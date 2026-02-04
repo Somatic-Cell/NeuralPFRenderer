@@ -67,7 +67,7 @@ extern "C" __global__ void __raygen__renderFrame_rgb()
                 1e-4f,    // tmin
                 1e20f,  // tmax
                 0.0f,   // rayTime
-                OptixVisibilityMask( 255 ),
+                OptixVisibilityMask( MASK_ALL ),
                 OPTIX_RAY_FLAG_NONE,
                 RADIANCE_RAY_TYPE,
                 RAY_TYPE_COUNT,
@@ -169,7 +169,7 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
                 1e-4f,    // tmin
                 1e20f,  // tmax
                 0.0f,   // rayTime
-                OptixVisibilityMask( 255 ),
+                OptixVisibilityMask( MASK_ALL ),
                 OPTIX_RAY_FLAG_NONE,
                 RADIANCE_RAY_TYPE,
                 RAY_TYPE_COUNT,

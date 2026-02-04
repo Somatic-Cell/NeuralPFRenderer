@@ -530,12 +530,12 @@ bool Renderer::buildAccel()
 
         inst.instanceId     = meshID;
         inst.sbtOffset      = meshID * RAY_TYPE_COUNT;
-        inst.visibilityMask = 255;
+        inst.visibilityMask = (unsigned int)MASK_SURFACE;
         inst.flags          = OPTIX_INSTANCE_FLAG_DISABLE_ANYHIT;     // インスタンスの挙動を指定．
-                                                            // OPTIX_INSTNCE_FLAG_NONE:                 デフォルト
-                                                            // OPTIX_INSTNCE_FLAG_DISABLE_TRANSFORM:    transform 行列を無視 (ワールド座標に直置き)
-                                                            // OPTIX_INSTNCE_FLAG_DISABLE_ANYHIT:       AnyHit シェーダを無視
-                                                            // OPTIX_INSTNCE_FLAG_ENFORCE_ANYHIT:       AnyHit シェーダを必ず呼ぶ
+                                                            // OPTIX_INSTANCE_FLAG_NONE:                 デフォルト
+                                                            // OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM:    transform 行列を無視 (ワールド座標に直置き)
+                                                            // OPTIX_INSTANCE_FLAG_DISABLE_ANYHIT:       AnyHit シェーダを無視
+                                                            // OPTIX_INSTANCE_FLAG_ENFORCE_ANYHIT:       AnyHit シェーダを必ず呼ぶ
         inst.traversableHandle  = m_gasHandle[meshID];
     }
 
@@ -552,12 +552,12 @@ bool Renderer::buildAccel()
         memcpy(inst.transform, transform, sizeof(float) * 12);
         inst.instanceId     = vdbInstanceID;
         inst.sbtOffset      = vdbInstanceID * RAY_TYPE_COUNT;
-        inst.visibilityMask = 255;
-        inst.flags          = OPTIX_INSTANCE_FLAG_NONE;     // インスタンスの挙動を指定．
-                                                            // OPTIX_INSTNCE_FLAG_NONE:                 デフォルト
-                                                            // OPTIX_INSTNCE_FLAG_DISABLE_TRANSFORM:    transform 行列を無視 (ワールド座標に直置き)
-                                                            // OPTIX_INSTNCE_FLAG_DISABLE_ANYHIT:       AnyHit シェーダを無視
-                                                            // OPTIX_INSTNCE_FLAG_ENFORCE_ANYHIT:       AnyHit シェーダを必ず呼ぶ
+        inst.visibilityMask = (unsigned int)MASK_VOLUME;
+        inst.flags          = OPTIX_INSTANCE_FLAG_DISABLE_ANYHIT;     // インスタンスの挙動を指定．
+                                                            // OPTIX_INSTANCE_FLAG_NONE:                 デフォルト
+                                                            // OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM:    transform 行列を無視 (ワールド座標に直置き)
+                                                            // OPTIX_INSTANCE_FLAG_DISABLE_ANYHIT:       AnyHit シェーダを無視
+                                                            // OPTIX_INSTANCE_FLAG_ENFORCE_ANYHIT:       AnyHit シェーダを必ず呼ぶ
         inst.traversableHandle  = m_vdbGASHandle;
     }
 
@@ -830,9 +830,11 @@ void Renderer::createMissPrograms()
     
     // m_missPrograms に radiance ray を登録
     if(m_sceneDesc.integrator.applySpectralRendering){
-        pgDesc.miss.entryFunctionName = "__miss__radiance_spectral";
+        // pgDesc.miss.entryFunctionName = "__miss__radiance_spectral";
+        pgDesc.miss.entryFunctionName = "__miss__radiance_noEnvMap_spectral";
     } else {
-        pgDesc.miss.entryFunctionName = "__miss__radiance_rgb";
+        // pgDesc.miss.entryFunctionName = "__miss__radiance_rgb";
+        pgDesc.miss.entryFunctionName = "__miss__radiance_noEnvMap_rgb";
     }
 
     OPTIX_CHECK(optixProgramGroupCreate(m_optixContext,
@@ -1211,6 +1213,15 @@ void Renderer::buildSBT()
     m_sbt.hitgroupRecordBase            = m_hitgroupRecordsBuffer.getDevicePointer();    // hitgroupRecords バッファのデバイス上の先頭アドレスを sbt に登録
     m_sbt.hitgroupRecordStrideInBytes   = sizeof(HitgroupRecord);                   // 
     m_sbt.hitgroupRecordCount           = (int)hitgroupRecords.size();
+
+    // std::cout << "sizeof(HitgroupRecord)=" << sizeof(HitgroupRecord) << "\n";
+    // std::cout << "alignof(HitgroupRecord)=" << alignof(HitgroupRecord) << "\n";
+
+    // auto base = (uint64_t)m_hitgroupRecordsBuffer.getDevicePointer();
+    // auto size = (uint64_t)hitgroupRecords.size() * sizeof(HitgroupRecord);
+    // std::cout << "SBT base=0x" << std::hex << base
+    //       << " size=0x" << size
+    //       << " end=0x"  << (base + size) << std::dec << "\n";
 }
 
 void Renderer::render()
@@ -1585,17 +1596,16 @@ void Renderer::setEnvMap(const std::string& envMapFileName)
 void Renderer::createLightTable()
 {
     //環境マップを光源として登録 (1枚だけ) 
-    LightDefinition lightDefinition;
-    lightDefinition.lightType = LIGHT_TYPE_ENV_SPHERE;
-    lightDefinition.lightIndexInType = 0;
+    // LightDefinition lightDefinition;
+    // lightDefinition.lightType = LIGHT_TYPE_ENV_SPHERE;
+    // lightDefinition.lightIndexInType = 0;
 
-    m_lightDefinitionTable.push_back(lightDefinition);
+    // m_lightDefinitionTable.push_back(lightDefinition);
 
     // 三角形の面光源を登録
     m_triangleLightDataTable.clear();
 
     int numMeshes = 0;
-    for(auto* mdl : m_models) (int)mdl->meshes.size();
 
     for(auto* mdl : m_models){
         for(int meshID = 0; meshID < (int)mdl->meshes.size(); ++meshID){
@@ -1873,6 +1883,20 @@ float Renderer::getWavelengthMax() const
     return m_wavelengthMax;
 }
 
+float Renderer::getDensityScale() const
+{
+    if(m_launchParams.vdbs){
+        return m_launchParams.vdbs[0].densityScale;
+    }
+}
+void Renderer::setDensityScale(const float densityScale)
+{
+    if(m_launchParams.vdbs){
+        m_launchParams.vdbs[0].densityScale = densityScale;
+    }
+}
+
+
 void Renderer::loadVDB()
 {
     m_vdbAssets = std::make_shared<NanoVDBVolumeAsset>();
@@ -2031,7 +2055,7 @@ void Renderer::loadAssets()
     
     VDBGeomData vdbData {};
     vdbData.nanoGrid        = grid.deviceGridPtr();
-    vdbData.densityScale    = 1.0f;
+    vdbData.densityScale    = 0.3f;
     vdbData.emissionScale   = 1.0f;
 
     m_vdbTable.push_back(vdbData);

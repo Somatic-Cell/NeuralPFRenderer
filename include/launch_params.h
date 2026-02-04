@@ -5,6 +5,10 @@
 #include "../utils/my_math.hpp"
 #include <cuda_runtime.h>
 
+static constexpr uint32_t MASK_VOLUME  = 0x01u;
+static constexpr uint32_t MASK_SURFACE = 0x02u;
+static constexpr uint32_t MASK_ALL     = MASK_VOLUME | MASK_SURFACE;
+
 // ray type
 enum {
     RADIANCE_RAY_TYPE=0, 
@@ -70,6 +74,7 @@ enum class GeomType : uint32_t {
 
 struct HitgroupSBTData {
     GeomType geomType;
+    uint32_t pad0;
     union {
         TriangleMeshSBTData tri;
         VDBSBTData          vdb;
@@ -138,10 +143,10 @@ struct LaunchParams {
         mymath::matrix3x4* objectMatrixBuffer;
         mymath::matrix3x3* normalMatrixBuffer;
 
-        int2    size            {make_int2(1920, 1080)};
+        int2    size            {make_int2(1280, 720)};
         int     accumID         {0};
         int     numPixelSamples {1};
-        int     maxBounce       {8};
+        int     maxBounce       {256};
         int     frameID         {0};
     } frame;
 
@@ -199,7 +204,7 @@ struct LaunchParams {
     TriangleMeshGeomData* meshes;
     int numMeshes       {0};
     
-    VDBGeomData* vdbs;
+    VDBGeomData* vdbs {nullptr};
     int numVDBs         {0};
     
     MaterialData* materials;

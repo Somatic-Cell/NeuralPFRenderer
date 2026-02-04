@@ -232,7 +232,7 @@ private:
         if(out.bytes == 0 || hostHandle.data() == nullptr){
             throw std::runtime_error("NanoVDB handle is empty.");
         }
-        auto* hGrid = hostHandle.grid<float>();
+        auto* hGrid = hostHandle.grid<float>(); // grid の先頭
         if(!hGrid){
             throw std::runtime_error("Converted NanoVDB is not NanoGir<float>");
         }

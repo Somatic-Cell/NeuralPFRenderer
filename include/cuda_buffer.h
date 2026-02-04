@@ -8,8 +8,32 @@
 
 class CUDABuffer {
 public:
-    CUDABuffer()
-    {}
+    CUDABuffer() = default;
+
+    // コピーの禁止
+    CUDABuffer(const CUDABuffer&) = delete;
+    CUDABuffer& operator=(const CUDABuffer&) = delete;
+    
+    // move
+    CUDABuffer(CUDABuffer&& other) noexcept
+        : sizeInBytes(other.sizeInBytes), d_ptr(other.d_ptr)
+    {
+        other.sizeInBytes = 0;
+        other.d_ptr = nullptr;
+    }
+
+    CUDABuffer& operator=(CUDABuffer&& other) noexcept
+    {
+        if(this != &other){
+            free();
+            sizeInBytes = other.sizeInBytes;
+            d_ptr       = other.d_ptr;
+            other.sizeInBytes = 0;
+            other.d_ptr = nullptr;
+        }
+        return *this;
+    }
+    
     ~CUDABuffer()
     {
         free();

@@ -257,7 +257,8 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_triangle_spe
     const float tb = clamp((1.0f - ta) * prd->random(), 0.0f, 1.0f);
     const float3 sampledPosition = v0 + ta * a + tb * b;
 
-    float3 emissionRGB = triangleLightData.constantEmission;
+    // float3 emissionRGB = triangleLightData.constantEmission;
+    float emission = triangleLightData.constantEmission.y;
 
     float distance = length(sampledPosition - prd->position);
     float3 lightDirection = normalize(sampledPosition - prd->position);
@@ -266,15 +267,15 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_triangle_spe
 
     if(cosTheta > 1e-5f){
         // テクスチャの参照位置
-        if(triangleLightData.emissiveTexture.texture > 0){
-            const float2 u0 = triangleLightData.uv0;
-            const float2 u1 = triangleLightData.uv1;
-            const float2 u2 = triangleLightData.uv2;
+        // if(triangleLightData.emissiveTexture.texture > 0){
+        //     const float2 u0 = triangleLightData.uv0;
+        //     const float2 u1 = triangleLightData.uv1;
+        //     const float2 u2 = triangleLightData.uv2;
 
-            const float2 sampledUVCoodinate = u0 + ta * (u1 - u0) + tb * (u2 - u0);
-            emissionRGB *= make_float3(tex2D<float4>(triangleLightData.emissiveTexture.texture, sampledUVCoodinate.x, 1.0 - sampledUVCoodinate.y));
-        }
-        float emission = upSamplingFromRGB(emissionRGB, *prd);
+        //     const float2 sampledUVCoodinate = u0 + ta * (u1 - u0) + tb * (u2 - u0);
+        //     emissionRGB *= make_float3(tex2D<float4>(triangleLightData.emissiveTexture.texture, sampledUVCoodinate.x, 1.0 - sampledUVCoodinate.y));
+        // }
+        // float emission = upSamplingFromRGB(emissionRGB, *prd);
         const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd->waveLengthNormalized, 0.5f);
         float pdfInTriangle = 1.0f / areaInWorld; // 面積
         float geometricTerm = cosTheta / fmaxf(distance * distance, 1e-7f);

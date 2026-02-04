@@ -25,3 +25,6 @@
 [submodule "ext/zlib"]
 	path = ext/zlib
 	url = https://github.com/madler/zlib.git
+[submodule "ext/fpng"]
+	path = ext/fpng
+	url = https://github.com/richgel999/fpng.git

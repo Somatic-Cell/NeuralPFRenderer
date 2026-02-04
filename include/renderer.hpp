@@ -95,6 +95,9 @@ public:
     const LaunchParams  getLaunchParams() const;
     const CUDABuffer&   getFinalColorBuffer() const;
 
+    float getDensityScale() const;
+    void setDensityScale(const float densityScale);
+
     // Tonemap 用
     void setWhite(const float white);
     float getWhite() const;
@@ -228,7 +231,7 @@ protected:
     CUDABuffer  m_envCDFCoarseConditional;  // W x H
     CUDABuffer  m_envPatchWeight;           // W x H
 
-    float m_exposure    {0.5f};
+    float m_exposure    {25.0f};
     float m_white       {5.0f};
 
     sceneIO::Scene m_sceneDesc;

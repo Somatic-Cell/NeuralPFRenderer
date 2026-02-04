@@ -352,28 +352,32 @@ bool intersectAABB(
     float& tExit    // aabb との交差位置（奥）
 )
 {
-    const float3 invD = make_float3(
-        (fabsf(direction.x) > 1e-20f) ? 1.0f / direction.x : 1e20f,
-        (fabsf(direction.y) > 1e-20f) ? 1.0f / direction.y : 1e20f,
-        (fabsf(direction.z) > 1e-20f) ? 1.0f / direction.z : 1e20f
-    );
+    float t0 = tMin;
+    float t1 = tMax;
+    auto slab = [&](float oA, float dA, float mn, float mx) -> bool 
+    { 
+        if (fabsf(dA) < 1e-20f) { // 平行：原点がスラブ外なら不交差 
+            return (oA >= mn && oA <= mx); 
+        } const float invD = 1.0f / dA; 
+        float tNear = (mn - oA) * invD; 
+        float tFar  = (mx - oA) * invD;
 
-    float3 t0 = (bMin - origin) * invD;
-    float3 t1 = (bMax - origin) * invD;
+        if (tNear > tFar) { 
+            float tmp = tNear; 
+            tNear = tFar; 
+            tFar = tmp; 
+        } 
+        t0 = fmaxf(t0, tNear); 
+        t1 = fminf(t1, tFar); 
+        return (t0 < t1); 
+    };
 
-    const float3 tSmall = make_float3(
-        fminf(t0.x, t1.x), 
-        fminf(t0.y, t1.y), 
-        fminf(t0.z, t1.z) 
-    );
-    const float3 tBig = make_float3(
-        fmaxf(t0.x, t1.x), 
-        fmaxf(t0.y, t1.y), 
-        fmaxf(t0.z, t1.z) 
-    );
+    if(!slab(origin.x, direction.x, bMin.x, bMax.x)) return false;
+    if(!slab(origin.y, direction.y, bMin.y, bMax.y)) return false;
+    if(!slab(origin.z, direction.z, bMin.z, bMax.z)) return false;
 
-    float tE = fmaxf(fmaxf(tSmall.x, tSmall.y), tSmall.z);
-    float tX = fminf(fminf(tBig.x,   tBig.y),   tBig.z);
+    float tE = t0;
+    float tX = t1;
 
     if(tX <= tE) return false;
 

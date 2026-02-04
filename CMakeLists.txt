@@ -124,6 +124,9 @@ target_link_libraries(imgui
 # json
 add_subdirectory(${EXT_DIR}/json)
 
+# fpng
+add_subdirectory(${EXT_DIR}/fpng)
+
 # openvdb
 option(OPENVDB_BUILD_NANOVDB "to enable NanoVDB" ON)
 option(OPENVDB_ENABLE_UNINSTALL "uninstall OpenVDB" OFF)
@@ -308,6 +311,8 @@ add_executable(${TARGET_NAME}
     "${INCLUDE_DIR}/ptx_data_reader.hpp"
     "${INCLUDE_DIR}/application.hpp"
     "${EXT_DIR}/stb/stb_image_write.h"
+    "${EXT_DIR}/fpng/src/fpng.h"
+    "${EXT_DIR}/fpng/src/fpng.cpp"
 )
 
 # -----------------------------------------------------

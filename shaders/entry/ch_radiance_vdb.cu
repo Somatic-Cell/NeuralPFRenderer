@@ -32,8 +32,8 @@ extern "C" __global__ void __closesthit__vdb_radiance_rgb()
     const float3 rayDirectionWorld  = normalize(optixGetWorldRayDirection());
     const float3 rayOriginWorld     = optixGetWorldRayOrigin();
 
-    const float3 rayDirectionObject = normalize(optixGetObjectRayDirection());
-    const float3 rayOriginObject    = optixGetObjectRayOrigin();
+    const float3 rayDirectionObject = optixTransformVectorFromWorldToObjectSpace(rayDirectionWorld);
+    const float3 rayOriginObject    = optixTransformPointFromWorldToObjectSpace(rayOriginWorld);
 
     prd.instanceID = optixGetInstanceId();
 
@@ -48,10 +48,18 @@ extern "C" __global__ void __closesthit__vdb_radiance_rgb()
     // --------------------------
     const float sigmaTScale = optixLaunchParams.vdbs[primitiveIndex].densityScale;
 
+    const auto* grid = reinterpret_cast<const nanovdb::FloatGrid*>(
+        optixLaunchParams.vdbs[vdbIndex].nanoGrid
+    );
+    const float densityScale = optixLaunchParams.vdbs[vdbIndex].densityScale;
+
+    auto acc = grid->getAccessor();
+    auto sampler = makeSampler(acc);
+
     // デルタトラッキング
     float tScatter;
-    const bool isScatter = deltaTrack_localMajorant<PRDRGB>(
-        prd, vdbIndex,
+    const bool isScatter = deltaTrack_localMajorant(
+        prd, densityScale, grid, acc, sampler,
         rayOriginObject, rayDirectionObject,
         tEnter, tExit,
         sigmaTScale,
@@ -73,7 +81,7 @@ extern "C" __global__ void __closesthit__vdb_radiance_rgb()
             1e-4f,    // tmin
             1e20f,  // tmax
             0.0f,   // rayTime
-            OptixVisibilityMask( 255 ),
+            OptixVisibilityMask( MASK_ALL ),
             OPTIX_RAY_FLAG_DISABLE_ANYHIT,
             RADIANCE_RAY_TYPE,
             RAY_TYPE_COUNT,
@@ -111,8 +119,8 @@ extern "C" __global__ void __closesthit__vdb_radiance_rgb()
 
             // ratio tracking
             const float3 wiObject   = optixTransformVectorFromWorldToObjectSpace(wiWorld);
-            const float transmittance = ratioTrack_localMajorant<PRDRGB>(
-                prd, vdbIndex,
+            const float transmittance = ratioTrack_localMajorant(
+                prd, densityScale, grid, acc, sampler,
                 rayOriginObject, rayDirectionObject,
                 tEnter, tExit,
                 sigmaTScale
@@ -133,7 +141,7 @@ extern "C" __global__ void __closesthit__vdb_radiance_rgb()
                 1e-3f,
                 distance - 1e-3f,
                 0.0f,
-                OptixVisibilityMask( 255 ),
+                OptixVisibilityMask( MASK_SURFACE ),
                 OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
                     | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
                 SHADOW_RAY_TYPE,    // SBT offset
@@ -176,21 +184,20 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
     PRDSpectral & prd = *getPRD<PRDSpectral>();
     const HitgroupSBTData &sbtData =*(const HitgroupSBTData*) optixGetSbtDataPointer();
 
-    const uint32_t vdbIndex         = sbtData.vdb.vdbIndex;
-    // const uint32_t materialIndex    = sbtData.vdb.materialIndex;
-
+    // tmax (AABB との交差点, tEnter）から，媒質にあたるまで，あるいは AABB を抜ける (tExit) まで，レイを延長していく
     const float tEnter  = optixGetRayTmax();
     const float tExit   = __uint_as_float(optixGetAttribute_0());
     if(!(tExit > tEnter)){
         prd.continueTrace = false;
         return;
     }
+    
     // ray の情報
     const float3 rayDirectionWorld  = normalize(optixGetWorldRayDirection());
     const float3 rayOriginWorld     = optixGetWorldRayOrigin();
 
-    const float3 rayDirectionObject = normalize(optixGetObjectRayDirection());
-    const float3 rayOriginObject    = optixGetObjectRayOrigin();
+    const float3 rayDirectionObject = optixTransformVectorFromWorldToObjectSpace(rayDirectionWorld);
+    const float3 rayOriginObject    = optixTransformPointFromWorldToObjectSpace(rayOriginWorld);
 
     prd.instanceID = optixGetInstanceId();
 
@@ -200,49 +207,65 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
     const float3 bMin = make_float3(aabb.minX, aabb.minY, aabb.minZ);
     const float3 bMax = make_float3(aabb.maxX, aabb.maxY, aabb.maxZ);
 
+    const uint32_t vdbIndex         = primitiveIndex;
+    
+
     // --------------------------
     // 媒質のパラメータ
     // --------------------------
-    const float sigmaTScale = optixLaunchParams.vdbs[primitiveIndex].densityScale;
+    const float sigmaTScale = 1.0f;
+
+    const auto* grid = reinterpret_cast<const nanovdb::FloatGrid*>(
+        optixLaunchParams.vdbs[vdbIndex].nanoGrid
+    );
+    const float densityScale = optixLaunchParams.vdbs[vdbIndex].densityScale;
+
+    auto acc = grid->getAccessor();
+    auto sampler = makeSampler(acc);
 
     // デルタトラッキング
     float tScatter;
-    const bool isScatter = deltaTrack_localMajorant<PRDSpectral>(
-        prd, vdbIndex, rayOriginObject, rayDirectionObject,
+    const bool isScatter = deltaTrack_localMajorant(
+        prd, densityScale, grid, acc, sampler,
+        rayOriginObject, rayDirectionObject,
         tEnter, tExit,
         sigmaTScale, tScatter
     );
 
     if(!isScatter)
     {
-        // 散乱しなかった場合，radiance ray をもう一度飛ばしてメッシュと交差させる
-        const float3 newOrigin = rayOriginWorld + tExit * rayDirectionWorld;
+        // // 散乱しなかった場合，radiance ray をもう一度飛ばしてメッシュと交差させる
+        // const float3 newOrigin = rayOriginWorld + tExit * rayDirectionWorld + 1e-4f * rayDirectionWorld;
 
-        uint32_t u0, u1;
-        packPointer(&prd, u0, u1);
+        // uint32_t u0, u1;
+        // packPointer(&prd, u0, u1);
 
-        optixTrace(
-            optixLaunchParams.traversable,
-            newOrigin,
-            rayDirectionWorld,
-            1e-4f,    // tmin
-            1e20f,  // tmax
-            0.0f,   // rayTime
-            OptixVisibilityMask( 255 ),
-            OPTIX_RAY_FLAG_DISABLE_ANYHIT,
-            RADIANCE_RAY_TYPE,
-            RAY_TYPE_COUNT,
-            RADIANCE_RAY_TYPE,
-            u0, u1
-        );
+        // optixTrace(
+        //     optixLaunchParams.traversable,
+        //     newOrigin,
+        //     rayDirectionWorld,
+        //     1e-4f,    // tmin
+        //     1e20f,  // tmax
+        //     0.0f,   // rayTime
+        //     OptixVisibilityMask( 255 ),
+        //     OPTIX_RAY_FLAG_DISABLE_ANYHIT,
+        //     RADIANCE_RAY_TYPE,
+        //     RAY_TYPE_COUNT,
+        //     RADIANCE_RAY_TYPE,
+        //     u0, u1
+        // );
+        const float3 scatteredPointObject = rayOriginObject + tScatter * rayDirectionObject;
+        const float3 scatteredPointWorld  = optixTransformPointFromObjectToWorldSpace(scatteredPointObject);
+        prd.position = scatteredPointWorld;
+
 
         return;
     }
 
     // 散乱する位置
-    const float3 scatteredPoint = rayOriginWorld + tScatter * rayDirectionWorld;
-
-    prd.position = scatteredPoint;
+    const float3 scatteredPointObject = rayOriginObject + tScatter * rayDirectionObject;
+    const float3 scatteredPointWorld  = optixTransformPointFromObjectToWorldSpace(scatteredPointObject);
+    prd.position = scatteredPointWorld;
 
     // 本当は，ここで散乱あるべとを反映させる
     // prd.albedo *= mediumAlbedo;
@@ -265,36 +288,50 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
 
             // ratio tracking
             const float3 wiObject   = optixTransformVectorFromWorldToObjectSpace(wiWorld);
-            const float transmittance = ratioTrack_localMajorant<PRDSpectral>(
-                prd, vdbIndex, rayOriginObject, rayDirectionObject,
-                tEnter, tExit, sigmaTScale
-            );
-
-            const float3 xExitW = rayOriginWorld + tExit * rayDirectionWorld;
-            const float3 newOrigin = xExitW + rayDirectionWorld * 1e-3f;
-
+            float tA0, tA1;
+            float tMediaExit = 0.0f;
+            float transmittance = 1.0f;
+            if(intersectAABB(scatteredPointObject, wiObject, bMin, bMax, 0.0f, distance, tA0, tA1)){
+                const float t0 = fmaxf(0.0f, tA0);
+                const float t1 = fminf(distance, tA1);
+                if(t1 > t0){
+                    transmittance = ratioTrack_localMajorant(
+                        prd, densityScale, grid, acc, sampler,
+                        scatteredPointObject, wiObject,
+                        t0, t1, sigmaTScale
+                    );
+                }
+                tMediaExit = fmaxf(0.0f, t1);
+            }
+            // shadow ray は体積の外から計算
+            const float3 xExitW = scatteredPointWorld + tMediaExit * wiWorld;
+            const float3 newOrigin = xExitW + wiWorld * 1e-3f;
+            const float  shadowTMax = distance - tMediaExit - 1e-3f;
 
             ShadowPRD shadowPrd;
+            shadowPrd.visible = true;
             uint32_t u0, u1;
             packPointer(&shadowPrd, u0, u1);
             
             // 光源へ接続して可視性を判断
-            optixTrace( 
-                optixLaunchParams.traversable,
-                newOrigin, // 出射位置
-                wiWorld,
-                1e-3f,
-                distance - 1e-3f,
-                0.0f,
-                OptixVisibilityMask( 255 ),
-                OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
-                    | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
-                SHADOW_RAY_TYPE,    // SBT offset
-                RAY_TYPE_COUNT,     // SBT stride
-                SHADOW_RAY_TYPE,    // miss SBT Index
-                u0, u1
-            );
-
+            if(shadowTMax > 0.0f){
+                optixTrace( 
+                    optixLaunchParams.traversable,
+                    newOrigin, // 出射位置
+                    wiWorld,
+                    0.0f,
+                    shadowTMax,
+                    0.0f,
+                    OptixVisibilityMask( MASK_SURFACE ),
+                    OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
+                        | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+                    SHADOW_RAY_TYPE,    // SBT offset
+                    RAY_TYPE_COUNT,     // SBT stride
+                    SHADOW_RAY_TYPE,    // miss SBT Index
+                    u0, u1
+                );
+            }
+            
             if(shadowPrd.visible && transmittance > 0.0f){
                 const float phasePdf    = evalPhaseFunction();
                 const float phaseValue  = phasePdf;

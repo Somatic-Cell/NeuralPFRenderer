@@ -8,6 +8,10 @@
 #include "sceneDescIO.hpp"
 #include <gl/GL.h>
 
+#define FPNG_IMPLEMENTATION
+#include "../ext/fpng/src/fpng.h"
+
+
 // #if defined(_WIN32)
 // #include <windows.h>
 // #ifndef NOMINMAX
@@ -102,6 +106,8 @@ public:
 
         createCUDAModule();
         fetchCUDAFunction();
+
+        fpng::fpng_init();
 
     }
 
@@ -215,7 +221,7 @@ public:
             ImGui::Text("Tonemap:");
             float white = m_renderer.getWhite();
             float exposure = m_renderer.getExposure();
-            if(ImGui::SliderFloat("Exposure", &exposure, 0.01f, 20.0f)){
+            if(ImGui::SliderFloat("Exposure", &exposure, 0.01f, 50.0f)){
                 m_renderer.setExposure(exposure);
             }
             if(ImGui::SliderFloat("White", &white, 1.f, 100.0f)){
@@ -245,6 +251,17 @@ public:
             ImGui::End();
         }
 
+        // {
+        //     float density = m_renderer.getDensityScale();
+        //     ImGui::Begin("For Volume Rendering");
+        //     ImGui::Text("Density:");
+        //     if(ImGui::SliderFloat("Scale", &density, 0.01f, 10.0f)){
+        //         m_renderer.setDensityScale(density);
+        //         m_cameraFrame.setIsTransformDirty(true);
+        //     }
+        //     ImGui::End();
+        // }
+
         GLFWCameraWindow::drawImGuiContents();
 
     }
@@ -266,7 +283,7 @@ public:
     void copyBufferToSurface();
 
 protected:
-    int2                    m_fbSize            {make_int2(1920, 1080)};
+    int2                    m_fbSize            {make_int2(1280, 720)};
     GLuint                  m_fbTexture         {0};        // レンダリング結果を表示する OpenGL テクスチャ 
     cudaGraphicsResource_t  m_cudaTexResource   {nullptr};
     Renderer                m_renderer;

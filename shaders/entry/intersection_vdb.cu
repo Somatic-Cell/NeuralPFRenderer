@@ -25,8 +25,13 @@ extern "C" __global__ void __intersection__vdb()
 
     float tEnter, tExit;
     if(!intersectAABB(rayOrigin, rayDirection, bmin, bmax, tMin, tMax, tEnter, tExit)) return;
+    
+    const bool inside = 
+        ( rayOrigin.x >= bmin.x && rayOrigin.x <= bmax.x) &&
+        ( rayOrigin.y >= bmin.y && rayOrigin.y <= bmax.y) &&
+        ( rayOrigin.z >= bmin.z && rayOrigin.z <= bmax.z);
 
-    const unsigned int hitKind = (fabsf(tEnter - tMin) < 1e-6f) ? HIT_KIND_VDB_INSIDE : HIT_KIND_VDB_ENTER;
+    const unsigned int hitKind = inside ? HIT_KIND_VDB_INSIDE : HIT_KIND_VDB_ENTER;
 
     const unsigned int a0 = __float_as_uint(tExit);
 

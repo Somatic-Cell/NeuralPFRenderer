@@ -237,7 +237,7 @@ extern "C" __global__ void __closesthit__radiance_rgb()
                 1e-3f,
                 lightSample.distance - 1e-3f,
                 0.0f,
-                OptixVisibilityMask( 255 ),
+                OptixVisibilityMask( MASK_SURFACE ),
                 OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
                     | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
                 SHADOW_RAY_TYPE,    // SBT offset
@@ -518,7 +518,7 @@ extern "C" __global__ void __closesthit__radiance_spectral()
                 1e-3f,
                 lightSample.distance - 1e-3f,
                 0.0f,
-                OptixVisibilityMask( 255 ),
+                OptixVisibilityMask( MASK_SURFACE ),
                 OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
                     | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
                 SHADOW_RAY_TYPE,    // SBT offset
