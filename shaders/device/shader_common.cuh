@@ -48,7 +48,7 @@ struct LightSample_Spectral
     float3  position;
     float3  direction;
     float distance      {1e7f};
-    float  emission     {0.0f};
+    float3  emissionRGB  {make_float3(0.0f)};
     float   pdf         {0.0f};
 };
 
@@ -391,5 +391,35 @@ bool intersectAABB(
     return (tEnter < tExit);
 }
 
+// Hero Wavelength Spectral Rendering
+
+
+template<int C>
+__device__ __forceinline__ float uLambda(int k, float u0) {
+    return fracf(u0 + (float)k / (float)C);   // u_k = frac(u0 + k/C)
+}
+
+__device__ __forceinline__ float lambdaFromU(float u, float lambdaMin, float lambdaMax) {
+    return lambdaMin + (lambdaMax - lambdaMin) * u;
+}
+
+__device__ __forceinline__ float logsumexp4(float4 v) {
+    float m = fmaxf(fmaxf(v.x, v.y), fmaxf(v.z, v.w));
+    return m + logf(expf(v.x - m) + expf(v.y - m) + expf(v.z - m) + expf(v.w - m));
+}
+
+__device__ __forceinline__ float hwssSpectralWeight(float4 logPprefix) {
+    float logDen = logsumexp4(logPprefix); // log( (1/C) Σ p_prefix_k )
+    if (!isfinite(logDen)) return 0.0f;
+    return expf(logPprefix.x - logDen);
+}
+
+__device__ __forceinline__ float wrap01(float u)
+{
+    // [0,1) に折り返す（mod 1）
+    u = u - floorf(u);
+    // 念のため 1.0 ちょうどを避ける（テクスチャの端サンプル事故対策）
+    return fminf(u, nextafterf(1.0f, 0.0f));
+}
 
 #endif // SHADER_COMMON_CUH_

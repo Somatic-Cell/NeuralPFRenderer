@@ -11,6 +11,11 @@
 #include "sceneDescIO.hpp"
 #include <cuda_runtime.h>
 #include "vdb_loader.hpp"
+#include "mie_tables_txt_loader.h"
+
+#include "nsf_hyper_coopvec_pack.hpp"
+#include "nsf_hyper_checkpoint.hpp"
+
 
 
 enum class OptixModuleIdentifier{
@@ -135,6 +140,9 @@ protected:
     // vdb 用
     void loadVDB();
 
+    // Mie texture
+    void loadMieData();
+
 
     CUcontext           m_cudaContext;
     CUstream            m_stream;
@@ -209,7 +217,7 @@ protected:
     
     CUDABuffer  m_envMapBuffer;
     int m_numDevices            {0};
-    bool m_isAccumulate         {true};
+    bool m_isAccumulate         {false};
 
     std::vector<std::string> m_optixModuleFileNames;    // optix 用の .ptx .optixir のコード一覧
     std::vector<std::string> m_cudaModuleFileNames;     // cuda 用の.ptx のコード一覧
@@ -231,8 +239,8 @@ protected:
     CUDABuffer  m_envCDFCoarseConditional;  // W x H
     CUDABuffer  m_envPatchWeight;           // W x H
 
-    float m_exposure    {25.0f};
-    float m_white       {5.0f};
+    float m_exposure    {1.1f};
+    float m_white       {100.0f};
 
     sceneIO::Scene m_sceneDesc;
 
@@ -270,6 +278,22 @@ protected:
     CUDABuffer m_meshTableBuffer;
     CUDABuffer m_materialTableBuffer;
     CUDABuffer m_vdbTableBuffer;
+
+    mie::MieHostTables  m_mieHostTables;
+    mie::MieGpuTextures m_mieGpuTextures;
+
+    CUDABuffer m_nsfPackedWeights;                 // 1本にまとめた packed（matrix + bias）
+    std::vector<uint32_t> m_nsfWOffsets;           // size = transforms*3
+    std::vector<uint32_t> m_nsfBOffsets;           // size = transforms*3
+    uint32_t m_nsfTransforms = 0;
+    uint32_t m_nsfInputPad   = 16;                 // 3 -> 16（推奨）
+
+    NsfHyperCheckpoint m_nsfHyperCheckPoint;
+    
+    void buildNsfPackedWeightsCoopVec(
+        uint32_t inputPad = 16
+    );
+
 };
 
 

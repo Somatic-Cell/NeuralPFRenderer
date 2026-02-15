@@ -36,11 +36,11 @@ struct PRDSpectral {
     float3 wi;          // incoming direction (光源方向，ワールド空間)
 
     float  albedo;
-    float3 primaryNormal;
-    float3 primaryAlbedo;
-    float  contribution;
+    // float3 primaryNormal;
+    // float3 primaryAlbedo;
+    float4 contribution;
 
-    float  waveLength; // nm
+    float  waveLength; // nm hero
     float  waveLengthNormalized; // 0-1, テクスチャフェッチ用
     
     struct{
@@ -53,6 +53,10 @@ struct PRDSpectral {
     bool continueTrace;
 
     uint instanceID;
+
+    // for HWSS
+    float4 beta;
+    float4 logPOrefix;
 };
 
 struct ShadowPRD {

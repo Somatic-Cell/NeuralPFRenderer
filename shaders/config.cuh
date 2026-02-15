@@ -6,6 +6,6 @@
 
 // typedef LCG<16> Random;
 typedef PCG32 Random;
-extern "C" __constant__ LaunchParams optixLaunchParams;
+extern "C" __constant__ __align__(16) LaunchParams optixLaunchParams;
 
 #endif // CONFIG_CUH_

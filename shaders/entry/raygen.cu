@@ -30,8 +30,8 @@ extern "C" __global__ void __raygen__renderFrame_rgb()
     packPointer( &prd, u0, u1);
 
     float3 pixelColor = make_float3(0.f); 
-    float3 pixelNormal = make_float3(0.f);
-    float3 pixelAlbedo = make_float3(0.f);
+    // float3 pixelNormal = make_float3(0.f);
+    // float3 pixelAlbedo = make_float3(0.f);
 
     for(int sampleID = 0; sampleID < optixLaunchParams.frame.numPixelSamples; sampleID ++){
 
@@ -81,8 +81,8 @@ extern "C" __global__ void __raygen__renderFrame_rgb()
         }
 
         pixelColor = pixelColor + (prd.contribution * ray.weight - pixelColor) / (sampleID + 1.0f);
-        pixelNormal = pixelNormal + (prd.primaryNormal - pixelNormal) / (sampleID + 1.0f);
-        pixelAlbedo = pixelAlbedo + (prd.primaryAlbedo - pixelAlbedo) / (sampleID + 1.0f);
+        // pixelNormal = pixelNormal + (prd.primaryNormal - pixelNormal) / (sampleID + 1.0f);
+        // pixelAlbedo = pixelAlbedo + (prd.primaryAlbedo - pixelAlbedo) / (sampleID + 1.0f);
 
     }
     pixelColor = clamp(pixelColor, 0.0f, 1000.0f);
@@ -99,8 +99,8 @@ extern "C" __global__ void __raygen__renderFrame_rgb()
     }
     
     optixLaunchParams.frame.colorBuffer[fbIndex] = rgba;
-    optixLaunchParams.frame.albedoBuffer[fbIndex] = make_float4(pixelAlbedo, 1.0f);
-    optixLaunchParams.frame.normalBuffer[fbIndex] = make_float4(pixelNormal, 1.0f);
+    // optixLaunchParams.frame.albedoBuffer[fbIndex] = make_float4(pixelAlbedo, 1.0f);
+    // optixLaunchParams.frame.normalBuffer[fbIndex] = make_float4(pixelNormal, 1.0f);
 }
 
 
@@ -127,12 +127,12 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
     packPointer( &prd, u0, u1);
 
     float3 pixelColor = make_float3(0.f); 
-    float3 pixelNormal = make_float3(0.f);
-    float3 pixelAlbedo = make_float3(0.f);
+    // float3 pixelNormal = make_float3(0.f);
+    // float3 pixelAlbedo = make_float3(0.f);
 
     for(int sampleID = 0; sampleID < optixLaunchParams.frame.numPixelSamples; sampleID ++){
 
-        prd.contribution = 0.0f;
+        prd.contribution = make_float4(0.0f);
         prd.albedo   = 1.f;
         prd.continueTrace = true;
         prd.bounce = 0;
@@ -145,6 +145,10 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
         const float wavelengthMin = optixLaunchParams.spectral.wavelengthMin;
         const float wavelengthMax = optixLaunchParams.spectral.wavelengthMax;
         prd.waveLength = wavelengthMin + (wavelengthMax - wavelengthMin) * wavelengthTexSamplePoint;
+
+        // For HWSS
+        prd.beta = make_float4(1.0f);
+        prd.logPOrefix = make_float4(0.0f);
 
         // スクリーン空間上のサンプル点をサブピクセル精度でサンプリング
         const float2 screen = make_float2(
@@ -170,7 +174,7 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
                 1e20f,  // tmax
                 0.0f,   // rayTime
                 OptixVisibilityMask( MASK_ALL ),
-                OPTIX_RAY_FLAG_NONE,
+                OPTIX_RAY_FLAG_DISABLE_ANYHIT,
                 RADIANCE_RAY_TYPE,
                 RAY_TYPE_COUNT,
                 RADIANCE_RAY_TYPE,
@@ -183,13 +187,23 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
         }
 
         // Spectral -> XYZ
-        const float xFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[0], wavelengthTexSamplePoint, 0.5f);
-        const float yFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[1], wavelengthTexSamplePoint, 0.5f);
-        const float zFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[2], wavelengthTexSamplePoint, 0.5f);
 
-        const float x = xFunc * prd.contribution;
-        const float y = yFunc * prd.contribution;
-        const float z = zFunc * prd.contribution;
+        const float weightLambda = (wavelengthMax - wavelengthMin) / 4.0f;
+        
+        float x = 0.0f, y = 0.0f, z = 0.0f;
+
+        for(int k = 0; k < 4; ++k){
+            const float u = wrap01(prd.waveLengthNormalized + float(k) / 4.0f);
+
+            const float xFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[0], u, 0.5f);
+            const float yFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[1], u, 0.5f);
+            const float zFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[2], u, 0.5f);
+
+            const float Lk = (&prd.contribution.x)[k];
+            x += xFunc * Lk * weightLambda;
+            y += yFunc * Lk * weightLambda;
+            z += zFunc * Lk * weightLambda;
+        }
         // XYZ -> sRGB (D65)
         // MEMO: この変換行列は簡易版であり，本当は厳密に計算して求める必要がある
         const float contribR =  3.240542f * x -1.5371835f * y -0.4985314f * z;
@@ -199,8 +213,8 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
         const float3 contributionRGB = make_float3(contribR, contribG, contribB);
 
         pixelColor = pixelColor + (contributionRGB * ray.weight - pixelColor) / (sampleID + 1.0f);
-        pixelNormal = pixelNormal + (prd.primaryNormal - pixelNormal) / (sampleID + 1.0f);
-        pixelAlbedo = pixelAlbedo + (prd.primaryAlbedo - pixelAlbedo) / (sampleID + 1.0f);
+        // pixelNormal = pixelNormal + (prd.primaryNormal - pixelNormal) / (sampleID + 1.0f);
+        // pixelAlbedo = pixelAlbedo + (prd.primaryAlbedo - pixelAlbedo) / (sampleID + 1.0f);
 
     }
     pixelColor = clamp(pixelColor, -1000.0f, 1000.0f);
@@ -217,6 +231,6 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
     }
     
     optixLaunchParams.frame.colorBuffer[fbIndex] = rgba;
-    optixLaunchParams.frame.albedoBuffer[fbIndex] = make_float4(pixelAlbedo, 1.0f);
-    optixLaunchParams.frame.normalBuffer[fbIndex] = make_float4(pixelNormal, 1.0f);
+    // optixLaunchParams.frame.albedoBuffer[fbIndex] = make_float4(pixelAlbedo, 1.0f);
+    // optixLaunchParams.frame.normalBuffer[fbIndex] = make_float4(pixelNormal, 1.0f);
 }

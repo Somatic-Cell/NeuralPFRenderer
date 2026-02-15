@@ -110,18 +110,18 @@ extern "C" __global__ void __miss__radiance_noEnvMap_rgb()
 {
     PRDRGB &prd = *getPRD<PRDRGB>();
     prd.continueTrace = false;
-    if(prd.bounce == 0){
-        prd.primaryAlbedo = make_float3(0.0f);
-        prd.primaryNormal = - prd.wi; 
-    }
+    // if(prd.bounce == 0){
+    //     prd.primaryAlbedo = make_float3(0.0f);
+    //     prd.primaryNormal = - prd.wi; 
+    // }
 }
 
 extern "C" __global__ void __miss__radiance_noEnvMap_spectral()
 {
     PRDSpectral &prd = *getPRD<PRDSpectral>();
     prd.continueTrace = false;
-    if(prd.bounce == 0){
-        prd.primaryAlbedo = make_float3(0.0f);
-        prd.primaryNormal = - prd.wi; 
-    }
+    // if(prd.bounce == 0){
+    //     prd.primaryAlbedo = make_float3(0.0f);
+    //     prd.primaryNormal = - prd.wi; 
+    // }
 }

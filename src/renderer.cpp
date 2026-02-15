@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 #include "texture.hpp"
 #include <optix_function_table_definition.h>
+#include <optix_types.h>
 // #include <filesystem>
 // #include <iostream>
 // #include <fstream>
@@ -144,7 +145,16 @@ Renderer::Renderer(std::vector<const Model*> models, sceneIO::Scene sceneDesc) :
     std::cout << "# Atmospheric RT: uploading spectrum data..." << std::endl;
     uploadSpectrumData();
 
+    std::cout << "# Atmospheric RT: uploading Mie data..." << std::endl;
+    loadMieData();
+
+#if defined(PHASE_FUNCTION_NEURAL)
+    std::cout << "# Atmospheric RT: uploading Network Weights..." << std::endl;
+    buildNsfPackedWeightsCoopVec();
+#endif
     std::cout << "# Atmospheric RT: CUDA kernel fully set up..." << std::endl;
+
+
 }
 
 
@@ -285,8 +295,9 @@ bool Renderer::buildAccel()
             triangleInput.triangleArray.numIndexTriplets    = (int)mesh.index.size();
             triangleInput.triangleArray.indexBuffer         = d_indices;
 
-            triangleInputFlags = OPTIX_GEOMETRY_FLAG_NONE;  // 特別な設定を行わない
+            triangleInputFlags = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;  // 特別な設定を行わない
             // MEMO: 
+            // OPTIX_GEOMETRY_FLAG_NONE;  // 特別な設定を行わない
             // OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT : any_hit シェーダを無効化
             // OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL : 1回だけ any-hit をよぶ
             // OPTIX_GEOMETRY_FLAG_DISABLE_TRIANGLE_FACE_CULLING :  バックフェースカリングを無効化　
@@ -698,6 +709,9 @@ void Renderer::createContext()
     cudaGetDeviceProperties(&m_deviceProps, deviceID);
     std::cout << "Running on device: " << m_deviceProps.name << std::endl;
 
+    OptixDeviceContextOptions options = {};
+    options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_OFF;
+
     CUresult cuRes = cuCtxGetCurrent(&m_cudaContext);
     if(cuRes != CUDA_SUCCESS){
         fprintf(stderr, "ERROR querying current context: error code %d\n", cuRes);
@@ -706,7 +720,7 @@ void Renderer::createContext()
     OPTIX_CHECK(
         optixDeviceContextCreate(
             m_cudaContext, 
-            0,              // OptixDeviceContextOption を省略し，デフォルト設定を使用
+            &options,              // OptixDeviceContextOption を省略し，デフォルト設定を使用
             &m_optixContext // 生成されたコンテキストをここに出力，格納
         )
     );
@@ -731,7 +745,8 @@ void Renderer::createOptiXModule()
 {
     m_moduleCompileOptions                      = {};
     m_moduleCompileOptions.maxRegisterCount     = 50;
-    m_moduleCompileOptions.optLevel             = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
+    // m_moduleCompileOptions.optLevel             = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
+    m_moduleCompileOptions.optLevel             = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
     m_moduleCompileOptions.debugLevel           = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
     
     m_pipelineCompileOptions                        = {};
@@ -742,9 +757,10 @@ void Renderer::createOptiXModule()
     m_pipelineCompileOptions.numAttributeValues     = 2;                            // ヒットしたプリミティブから返される補助情報数．例えば，重心座標 (u, v)
                                                                                     // プリミティブの中で，必要な attr の最大個数を指定すればよい．
     m_pipelineCompileOptions.exceptionFlags         =                               // 例外処理を有効化するフラグ
-        OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW                                             // コールスタックが溢れた場合の例外
-        | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH                                              // 最大再帰深度を超えた場合に発生する例外をキャッチ
-        | OPTIX_EXCEPTION_FLAG_USER;                                                    // 
+        OPTIX_EXCEPTION_FLAG_NONE;                                             
+        // OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW                                             // コールスタックが溢れた場合の例外
+        // | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH                                              // 最大再帰深度を超えた場合に発生する例外をキャッチ
+        // | OPTIX_EXCEPTION_FLAG_USER;                                                    // 
     m_pipelineCompileOptions.pipelineLaunchParamsVariableName   = "optixLaunchParams";  // パラメータのグローバル変数名．CUDA 側と一致させる必要があるので注意
     
     m_pipelineLinkOptions.maxTraceDepth             = 4;                            // __raygen__ から始まるレイパスで，最大何回 OptixTrace() を呼び出すか
@@ -2066,4 +2082,355 @@ void Renderer::loadAssets()
     // launch params に登録
     m_launchParams.vdbs = (VDBGeomData*)m_vdbTableBuffer.getDevicePointer();
     m_launchParams.numVDBs = (int)m_vdbTable.size();
+}
+
+
+static bool roundtrip_check_matrix_fp16_bits(
+    OptixDeviceContext ctx, cudaStream_t stream,
+    const uint16_t* h_W_rowmajor_bits,  // (N x K) row-major
+    uint32_t N, uint32_t K,
+    CUdeviceptr d_packed_base,          // packed weights base
+    size_t packed_off_bytes             // offset of this matrix
+){
+    const size_t bytesRM = (size_t)N * (size_t)K * sizeof(uint16_t);
+
+    // out: ROW_MAJOR を受け取るデバイスバッファ
+    void* tmp = nullptr;
+    cudaMalloc(&tmp, bytesRM);
+    CUdeviceptr d_back = (CUdeviceptr)tmp;
+
+    // in desc: INFERENCING_OPTIMAL
+    OptixNetworkDescription inNet{};
+    OptixCoopVecMatrixDescription inMat{};
+    setSingleMatrixDesc(
+        ctx, inNet, inMat,
+        N, K,
+        OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
+        OPTIX_COOP_VEC_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
+        packed_off_bytes
+    );
+
+    // out desc: ROW_MAJOR
+    OptixNetworkDescription outNet{};
+    OptixCoopVecMatrixDescription outMat{};
+    setSingleMatrixDesc(
+        ctx, outNet, outMat,
+        N, K,
+        OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
+        OPTIX_COOP_VEC_MATRIX_LAYOUT_ROW_MAJOR,
+        0
+    );
+    // ROW_MAJOR の stride は必須（1行あたりのバイト数）
+    outMat.rowColumnStrideInBytes = (uint32_t)(K * sizeof(uint16_t));
+
+    OPTIX_CHECK(optixCoopVecMatrixConvert(
+        ctx,
+        stream,
+        1,
+        &inNet,
+        d_packed_base,
+        0,
+        &outNet,
+        d_back,
+        0
+    ));
+    cudaStreamSynchronize(stream);
+
+    // host に戻して bitwise 比較
+    std::vector<uint16_t> back(size_t(N) * size_t(K));
+    cudaMemcpy(back.data(), (void*)d_back, bytesRM, cudaMemcpyDeviceToHost);
+    cudaFree((void*)d_back);
+
+    return 0 == std::memcmp(back.data(), h_W_rowmajor_bits, bytesRM);
+}
+
+
+void Renderer::loadMieData()
+{
+    std::filesystem::path exePath;
+    char pathBuffer[MAX_PATH] = {};
+#if defined(_WIN32)
+    if(GetModuleFileNameA(NULL, pathBuffer, MAX_PATH) == 0){
+        std::cerr << "ERROR: GetModuleFileNameA failed" << std::endl;
+    }
+    exePath = std::filesystem::path(pathBuffer);
+#else
+    ssize_t count = readlink("/proc/self/exe", exePath, PATH_MAX);
+    if(count == -1) {
+        std::cerr << "ERROR: readlink() failed" << std::endl;
+    }
+#endif
+    std::filesystem::path dataDir = exePath.parent_path().parent_path().parent_path().parent_path() / "mieSimData";
+            
+    m_mieHostTables = mie::load_all_txt_tables_from_directory(dataDir.string());
+    m_mieGpuTextures = mie::upload_to_gpu_textures(m_mieHostTables);
+
+    m_launchParams.mieTexture.phaseParameterG = m_mieGpuTextures.tex_g;
+    m_launchParams.mieTexture.pdf = m_mieGpuTextures.tex_pdf;
+    m_launchParams.mieTexture.cdf = m_mieGpuTextures.tex_cdf;
+    m_launchParams.mieTexture.numTheta      = m_mieHostTables.Ntheta;
+    m_launchParams.mieTexture.numLambda     = m_mieHostTables.Nlambda;
+    m_launchParams.mieTexture.numDiameter   = m_mieHostTables.Nd;
+}
+
+void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
+{
+    std::filesystem::path exePath;
+    char pathBuffer[MAX_PATH] = {};
+#if defined(_WIN32)
+    if(GetModuleFileNameA(NULL, pathBuffer, MAX_PATH) == 0){
+        std::cerr << "ERROR: GetModuleFileNameA failed" << std::endl;
+    }
+    exePath = std::filesystem::path(pathBuffer);
+#else
+    ssize_t count = readlink("/proc/self/exe", exePath, PATH_MAX);
+    if(count == -1) {
+        std::cerr << "ERROR: readlink() failed" << std::endl;
+    }
+#endif
+    std::filesystem::path dataDir = exePath.parent_path().parent_path().parent_path().parent_path() / "weights/flow.safetensors";
+    
+    try {
+    m_nsfHyperCheckPoint = NsfHyperCheckpoint::Load(dataDir.string());
+} catch (const std::exception& e) {
+    std::cerr << "NSF load failed: " << e.what() << "\n";
+    throw; // もしくは return;
+}
+    m_nsfTransforms = (uint32_t)m_nsfHyperCheckPoint.transforms();
+    m_nsfInputPad   = inputPad;
+
+    // 3 transforms / 3 layers（あなたの NSF hyper MLP 前提）
+    m_nsfWOffsets.assign((size_t)m_nsfTransforms * 3u, 0u);
+    m_nsfBOffsets.assign((size_t)m_nsfTransforms * 3u, 0u);
+
+
+    // ----------------------------
+    // Pass 1: offsets と total bytes を計算
+    // ----------------------------
+    uint32_t cur = 0;
+    for(uint32_t t=0; t<m_nsfTransforms; ++t){
+        for(uint32_t l=0; l<3u; ++l){
+            // layer0: (64 x 3) を (64 x inputPad) に拡張する
+            const auto& H = m_nsfHyperCheckPoint.hyperAt((int)t);
+            uint32_t N = 0, K = 0, Kpad = 0;
+            if(l==0){ N = (uint32_t)H.l0.out; K = (uint32_t)H.l0.in;  Kpad = inputPad; }
+            if(l==1){ N = (uint32_t)H.l1.out; K = (uint32_t)H.l1.in;  Kpad = K; }
+            if(l==2){ N = (uint32_t)H.l2.out; K = (uint32_t)H.l2.in;  Kpad = K; }
+
+            uint32_t Npack = N;
+            if(l == 2) Npack = 96;
+
+            std::cout << "[" << l << "] N:" << N << ", Npack" << Npack << ", K: " << K << ", Kpad: " << Kpad << std::endl;
+
+            // packed weight（INFERENCING_OPTIMAL）
+            cur = roundUp64_u32(cur);
+            m_nsfWOffsets[idxTL(t,l)] = cur;
+            cur += coopSizeFP16(m_optixContext, Npack, Kpad, OPTIX_COOP_VEC_MATRIX_LAYOUT_INFERENCING_OPTIMAL);
+
+            // bias（FP16 raw）も同一バッファに入れる
+            cur = roundUp64_u32(cur);
+            m_nsfBOffsets[idxTL(t,l)] = cur;
+            cur += roundUp64_u32(Npack * (uint32_t)sizeof(uint16_t));
+        }
+    }
+    const uint32_t totalBytes = roundUp64_u32(cur);
+
+    // ----------------------------
+    // GPU packed バッファ確保
+    // ----------------------------
+    m_nsfPackedWeights.resize((size_t)totalBytes);
+    std::cout << "total bytes: "  << totalBytes << std::endl;
+
+    // ----------------------------
+    // Pass 2: 各 layer を Convert + bias copy
+    // ----------------------------
+    for(uint32_t t=0; t<m_nsfTransforms; ++t){
+        const auto& H = m_nsfHyperCheckPoint.hyperAt((int)t);
+
+        for(uint32_t l=0; l<3u; ++l){
+            // 取り出し（CPU側の生 weight/bias）
+            const NsfHyperCheckpoint::LinearFP16* L = nullptr;
+            if(l==0) L = &H.l0;
+            if(l==1) L = &H.l1;
+            if(l==2) L = &H.l2;
+            const uint32_t N = (uint32_t)L->out;
+            const uint32_t K = (uint32_t)L->in;
+            const uint32_t Kpad = (l==0) ? inputPad : K;
+
+            uint32_t Npack = N;
+            if(l == 2) Npack = 96;
+            std::vector<uint16_t> Wnxkpad;
+            if(l == 2){
+                Wnxkpad.assign((size_t)Npack * (size_t)Kpad, uint16_t(0)); // 96x64
+                for(uint32_t r=0; r<N; ++r){                               // N = 95
+                    std::memcpy(
+                        Wnxkpad.data() + (size_t)r * (size_t)Kpad,
+                        L->W.data()    + (size_t)r * (size_t)K,
+                        (size_t)K * sizeof(uint16_t)
+                    );
+                }
+            }else{
+                // (N x Kpad) row-major（layer0のみ pad）
+                // L->W は (out=N, in=K) の順で row-major を想定（safetensorsからの読み出しと一致）
+                Wnxkpad = makeNxKpad_fp16_bits(L->W.data(), Npack, K, Kpad);
+            }
+            // in/out network（あなたの既存 Convert 呼び出し形式）
+            OptixNetworkDescription inNet{};
+            OptixCoopVecMatrixDescription inLayer{};
+            OptixNetworkDescription outNet{};
+            OptixCoopVecMatrixDescription outLayer{};
+
+            // 入力行列: ROW_MAJOR FP16, offset=0
+            setSingleMatrixDesc(
+                m_optixContext,
+                inNet, inLayer,
+                Npack, Kpad,
+                OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
+                OPTIX_COOP_VEC_MATRIX_LAYOUT_ROW_MAJOR,
+                0
+            );
+
+            // 出力行列: INFERENCING_OPTIMAL FP16, offset = wOffset
+            const uint32_t wOff = m_nsfWOffsets[idxTL(t,l)];
+            setSingleMatrixDesc(
+                m_optixContext,
+                outNet, outLayer,
+                Npack, Kpad,
+                OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
+                OPTIX_COOP_VEC_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
+                (size_t)wOff
+            );
+
+            // src を一時 device に上げる（Convert は device ptr 前提）
+            CUdeviceptr d_src = 0;
+            const size_t srcBytes = (size_t)Npack * (size_t)Kpad * sizeof(uint16_t);
+            CUDA_CHECK(cudaMalloc((void**)&d_src, roundUp64_u32((uint32_t)srcBytes)));
+            CUDA_CHECK(cudaMemcpyAsync((void*)d_src, Wnxkpad.data(), srcBytes, cudaMemcpyHostToDevice, m_stream));
+            CUDA_CHECK(cudaStreamSynchronize(m_stream));
+
+            // Convert: packedWeights に書き込む（outLayer.offsetInBytes を内部で参照）
+            OPTIX_CHECK(optixCoopVecMatrixConvert(
+                m_optixContext,
+                m_stream,
+                1,
+                &inNet,
+                d_src,
+                0,
+                &outNet,
+                m_nsfPackedWeights.getDevicePointer(),
+                0
+            ));
+            CUDA_CHECK(cudaStreamSynchronize(m_stream));
+            CUDA_CHECK(cudaGetLastError());
+
+            if (true) {
+                const uint32_t wOff = m_nsfWOffsets[idxTL(t,l)];
+                bool ok = roundtrip_check_matrix_fp16_bits(
+                    m_optixContext, m_stream,
+                    Wnxkpad.data(), Npack, Kpad,
+                    m_nsfPackedWeights.getDevicePointer(),  // packed base
+                    (size_t)wOff                            // packed offset in bytes
+                );
+                if (!ok) {
+                    std::cerr << "[NSF] roundtrip failed at t=" << t << " l=" << l
+                              << " (N=" << Npack << " K=" << Kpad << ")\n";
+                    // ここで throw して止めるのがおすすめです（原因が convert/offset 側と確定するので）
+                    throw std::runtime_error("NSF coopvec pack roundtrip failed");
+                } else {
+                    std::cout << "OK!!" << std::endl;
+                }
+            }
+
+
+            CUDA_CHECK(cudaFree((void*)d_src));
+
+            // bias を packed buffer の bias offset へコピー
+            const uint32_t bOff = m_nsfBOffsets[idxTL(t,l)];
+            const size_t bBytes = (size_t)Npack * sizeof(uint16_t);
+            CUdeviceptr d_bias = m_nsfPackedWeights.getDevicePointer() + (CUdeviceptr)bOff;
+
+
+            if(l == 2){
+                std::vector<uint16_t> bpack(Npack, uint16_t(0));  // 96
+                std::memcpy(bpack.data(), L->b.data(), (size_t)N * sizeof(uint16_t)); // 95
+                CUDA_CHECK(cudaMemcpyAsync((void*)d_bias, bpack.data(),
+                                           (size_t)Npack*sizeof(uint16_t),
+                                           cudaMemcpyHostToDevice, m_stream));
+            }else{
+                CUDA_CHECK(cudaMemcpyAsync((void*)d_bias, L->b.data(),
+                                           (size_t)N*sizeof(uint16_t),
+                                           cudaMemcpyHostToDevice, m_stream));
+            }
+            
+        }
+    }
+
+    CUDA_CHECK(cudaStreamSynchronize(m_stream));
+
+    // ----------------------------
+    // launchParams.nsf を更新（ホスト計算済みのオフセットを共有）
+    // ----------------------------
+    {
+        auto& P = m_launchParams.nsf;
+
+        P.packedBase  = m_nsfPackedWeights.getDevicePointer();
+        P.packedBytes = totalBytes;
+        P.transforms  = m_nsfTransforms;
+        P.inputPad    = m_nsfInputPad;
+        std::cout << "packedBytes: " << totalBytes << ", transforms: " << m_nsfTransforms << ", inputPad: " <<  m_nsfInputPad << std::endl;
+
+        P.bins    = (uint32_t)m_nsfHyperCheckPoint.bins();
+        P.hidden  = (uint32_t)m_nsfHyperCheckPoint.hidden();
+        P.context = (uint32_t)m_nsfHyperCheckPoint.context();
+
+        std::cout << "bins: " << P.bins << ", hidden: " << P.hidden << ", context: " << P.context << std::endl;
+
+        // 未使用領域をゼロクリア（安全）
+        for(uint32_t t=0; t<LaunchParams::NSF_MAX_TRANSFORMS; ++t){
+            for(uint32_t l=0; l<LaunchParams::NSF_LAYERS_PER_TRANSFORM; ++l){
+                P.wOffset[t][l] = 0;
+                P.bOffset[t][l] = 0;
+                P.N[t][l] = 0;
+                P.K[t][l] = 0;
+            }
+        }
+
+        // offsets コピー
+        for(uint32_t t=0; t<m_nsfTransforms; ++t){
+            const auto& H = m_nsfHyperCheckPoint.hyperAt((int)t); 
+            for(uint32_t l=0; l<3u; ++l){
+                const uint32_t wi = m_nsfWOffsets[idxTL(t,l)];
+                const uint32_t bi = m_nsfBOffsets[idxTL(t,l)];
+                P.wOffset[t][l] = wi;
+                P.bOffset[t][l] = bi;
+
+                // dims（任意）
+                const NsfHyperCheckpoint::LinearFP16* L = (l==0)? &H.l0 : (l==1)? &H.l1 : &H.l2;
+                const uint32_t N = (uint32_t)L->out;
+                const uint32_t K = (uint32_t)L->in;
+                const uint32_t Kpad = (l==0)? m_nsfInputPad : K;
+
+                uint32_t Npack = N;
+                if(l == 2) Npack = 96;
+                
+                P.N[t][l] = (uint16_t)Npack;
+                P.K[t][l] = (uint16_t)Kpad;
+            }
+        }
+
+        uint32_t maxW = 0, maxB = 0;
+        for (uint32_t t=0; t<m_nsfTransforms; ++t)
+        for (uint32_t l=0; l<3; ++l){
+            maxW = std::max(maxW, m_nsfWOffsets[idxTL(t,l)]);
+            maxB = std::max(maxB, m_nsfBOffsets[idxTL(t,l)]);
+        }
+        std::cout << "maxWOff=" << maxW << " maxBOff=" << maxB << "\n";
+
+        std::cout << "LP.wOffset[2][2]=" << P.wOffset[2][2]
+            << " LP.bOffset[2][2]=" << P.bOffset[2][2] << "\n";
+
+        auto base = (uint64_t)m_nsfPackedWeights.getDevicePointer();
+        std::cout << "packedBase=" << (void*)base
+          << " mod64=" << (base & 63ull) << "\n";
+    }
 }

@@ -155,9 +155,7 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_env_sphere_c
     lightSample.direction = direction; 
     float u, v;
     orthogonalToUVCoord(direction, &u, &v);
-    const float3 emissionRGB = make_float3(tex2D<float4>(optixLaunchParams.envMap, u, v));
-    const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd->waveLengthNormalized, 0.5f);
-    lightSample.emission = upSamplingFromRGB(emissionRGB, *prd) *D65;
+    lightSample.emissionRGB = make_float3(tex2D<float4>(optixLaunchParams.envMap, u, v));
     return lightSample;
 }
 
@@ -181,8 +179,7 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_env_sphere_i
         lightSample.direction = direction; 
         float u, v;
         orthogonalToUVCoord(direction, &u, &v);
-        const float3 emissionRGB = make_float3(tex2D<float4>(optixLaunchParams.envMap, u, v));
-        lightSample.emission = upSamplingFromRGB(emissionRGB, *prd);
+        lightSample.emissionRGB = make_float3(tex2D<float4>(optixLaunchParams.envMap, u, v));
         return lightSample;
     }
 
@@ -215,9 +212,7 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_env_sphere_i
 
     // サンプリング
     float2 uv = envUVFromSpherical(theta, phi);
-    const float3 emissionRGB = make_float3(tex2D<float4>(optixLaunchParams.envMap, uv.x, uv.y));
-    const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd->waveLengthNormalized, 0.5f);
-    lightSample.emission = upSamplingFromRGB(emissionRGB, *prd) *D65;
+    lightSample.emissionRGB = make_float3(tex2D<float4>(optixLaunchParams.envMap, uv.x, uv.y));
     
     // PDF の計算
     const float pPatch = wPatch[patchIndex] / totalWeight;
@@ -257,8 +252,7 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_triangle_spe
     const float tb = clamp((1.0f - ta) * prd->random(), 0.0f, 1.0f);
     const float3 sampledPosition = v0 + ta * a + tb * b;
 
-    // float3 emissionRGB = triangleLightData.constantEmission;
-    float emission = triangleLightData.constantEmission.y;
+    float3 emissionRGB = triangleLightData.constantEmission;
 
     float distance = length(sampledPosition - prd->position);
     float3 lightDirection = normalize(sampledPosition - prd->position);
@@ -276,14 +270,13 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_triangle_spe
         //     emissionRGB *= make_float3(tex2D<float4>(triangleLightData.emissiveTexture.texture, sampledUVCoodinate.x, 1.0 - sampledUVCoodinate.y));
         // }
         // float emission = upSamplingFromRGB(emissionRGB, *prd);
-        const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd->waveLengthNormalized, 0.5f);
         float pdfInTriangle = 1.0f / areaInWorld; // 面積
         float geometricTerm = cosTheta / fmaxf(distance * distance, 1e-7f);
         lightSample.pdf         = pdfInTriangle /  float(optixLaunchParams.light.numLights) / geometricTerm;
         lightSample.distance    = distance;
         lightSample.position    = sampledPosition;
         lightSample.direction   = lightDirection;
-        lightSample.emission    = emission * optixLaunchParams.light.lightIntensityFactor * D65; // MEMO: pdfChoseLight とするのが分かりやすいい？
+        lightSample.emissionRGB = emissionRGB; // MEMO: pdfChoseLight とするのが分かりやすいい？
     }
 
     return lightSample;

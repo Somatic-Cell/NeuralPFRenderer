@@ -174,10 +174,10 @@ extern "C" __global__ void __closesthit__radiance_rgb()
         }
             
 
-        if(prd.bounce == 0){
-            prd.primaryNormal = Ns;
-            prd.primaryAlbedo = albedo;
-        }
+        // if(prd.bounce == 0){
+        //     prd.primaryNormal = Ns;
+        //     prd.primaryAlbedo = albedo;
+        // }
         prd.continueTrace = false;
         return;
     }
@@ -194,10 +194,10 @@ extern "C" __global__ void __closesthit__radiance_rgb()
         prd.continueTrace = true;
         prd.position += (wiLocal.y > 0.0f) ? Ng * 1e-3f : -1.0f * Ng * 1e-3f;
 
-        if(prd.bounce == 0){
-            prd.primaryNormal = Ns;
-            prd.primaryAlbedo = albedo;
-        }
+        // if(prd.bounce == 0){
+        //     prd.primaryNormal = Ns;
+        //     prd.primaryAlbedo = albedo;
+        // }
         return;
     }
 
@@ -273,10 +273,10 @@ extern "C" __global__ void __closesthit__radiance_rgb()
     prd.wi = sampledWi; 
     prd.continueTrace = true;
     
-    if(prd.bounce == 0){
-        prd.primaryNormal = Ns;
-        prd.primaryAlbedo = albedo;
-    }
+    // if(prd.bounce == 0){
+    //     prd.primaryNormal = Ns;
+    //     prd.primaryAlbedo = albedo;
+    // }
 }
 
 
@@ -429,58 +429,68 @@ extern "C" __global__ void __closesthit__radiance_spectral()
         if(cosTheta > 1e-7f)
         {
             float3 emissionRGB = material->emissive;
-            if(material->emissiveTexture.texture > 0){
-                float4 fromTexture = tex2D<float4>(
-                    material->emissiveTexture.texture, emissiveTextureCoordinate.x, 1.0f - emissiveTextureCoordinate.y);
-                emissionRGB = make_float3(fromTexture);
-            }
-            float emission = upSamplingFromRGB(emissionRGB, prd);
-            const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, prd.waveLengthNormalized, 0.5f);
-            emission *= (optixLaunchParams.light.lightIntensityFactor  * D65);
+            // if(material->emissiveTexture.texture > 0){
+            //     float4 fromTexture = tex2D<float4>(
+            //         material->emissiveTexture.texture, emissiveTextureCoordinate.x, 1.0f - emissiveTextureCoordinate.y);
+            //     emissionRGB = make_float3(fromTexture);
+            // }
+            
 
+            // 方向の MIS
+            float directionalMISWeight = 1.0f;
             if(prd.bounce != 0)
             {
                 const float r = rayLength;
                 const float pSelect = 1.0f / float(optixLaunchParams.light.numLights);
                 float pArea = 1.0f / (triangleArea);
-                // const float geometricTerm = cosTheta / (rayLength * rayLength);
-                const float pdfLight =  pSelect * pArea * (r * r) / cosTheta;
-                
-                const float weight = balanceHeuristicWeight(1, fmaxf(prd.pdf.bxdf, 1e-7f), 1, fmaxf(pdfLight, 1e-7f));
-                prd.contribution += emission * prd.albedo * weight;
-            } else {
-                prd.contribution += emission * prd.albedo;
+                float pdfLight =  pSelect * pArea * (r * r) / cosTheta;
+                pdfLight = fmaxf(pdfLight, 1e-7f);
+
+                const float pdfBXDFHero = fmaxf(prd.pdf.bxdf, 1e-7f);
+                directionalMISWeight = balanceHeuristicWeight(1, pdfBXDFHero, 1, pdfLight);
+            }
+            
+            // 波長方向の MIS
+            const float spectralMISWeight = hwssSpectralWeight(prd.logPOrefix);
+            constexpr int C = 4;
+            const float invC = 1.0f/ float(C);
+            const float uHero = prd.waveLengthNormalized;
+
+            for(int k = 0; k < C; ++k){
+                float emission = emissionRGB.y;
+                const float u = wrap01(uHero + float(k) * invC);
+                const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
+                emission *= (optixLaunchParams.light.lightIntensityFactor  * D65);
+
+                // throughput
+                float beta_k = (&prd.beta.x)[k];
+                (&prd.contribution.x)[k] += emission * beta_k * directionalMISWeight * spectralMISWeight;
             }
         }
             
-
-        if(prd.bounce == 0){
-            prd.primaryNormal = Ns;
-            prd.primaryAlbedo = albedoRGB;
-        }
         prd.continueTrace = false;
         return;
     }
 
 
     const float3 woLocal = worldToLocal(-1.0f * rayDirection, tangent, Ns, biNormal);
-    // ガラスのメッシュと交差した場合の処理（レイトレーシングを続行）
-    if(material->materialType == MATERIAL_TYPE_GLASS)
-    {
-        int callableFunctionOffset = NUM_LENS_TYPE + MATERIAL_TYPE_GLASS * 2; // 登録した順番が lens の後で，glass * 2 が 対応するマテリアルの sample 関数
-        prd.position = intersectedPoint;
-        float3 wiLocal = optixDirectCall<float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, woLocal, matData, &prd);
-        prd.wi = localToWorld(wiLocal, tangent, Ns, biNormal);
-        prd.continueTrace = true;
+    // // ガラスのメッシュと交差した場合の処理（レイトレーシングを続行）
+    // if(material->materialType == MATERIAL_TYPE_GLASS)
+    // {
+    //     int callableFunctionOffset = NUM_LENS_TYPE + MATERIAL_TYPE_GLASS * 2; // 登録した順番が lens の後で，glass * 2 が 対応するマテリアルの sample 関数
+    //     prd.position = intersectedPoint;
+    //     float3 wiLocal = optixDirectCall<float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, woLocal, matData, &prd);
+    //     prd.wi = localToWorld(wiLocal, tangent, Ns, biNormal);
+    //     prd.continueTrace = true;
         
-        prd.position += (wiLocal.y > 0.0f) ? Ng * 1e-3f : -1.0f * Ng * 1e-3f;
+    //     prd.position += (wiLocal.y > 0.0f) ? Ng * 1e-3f : -1.0f * Ng * 1e-3f;
 
-        if(prd.bounce == 0){
-            prd.primaryNormal = Ns;
-            prd.primaryAlbedo = albedoRGB;
-        }
-        return;
-    }
+    //     if(prd.bounce == 0){
+    //         prd.primaryNormal = Ns;
+    //         prd.primaryAlbedo = albedoRGB;
+    //     }
+    //     return;
+    // }
 
 
     const int numLights = optixLaunchParams.light.numLights; // 後で置き場を考える
@@ -498,19 +508,14 @@ extern "C" __global__ void __closesthit__radiance_spectral()
 
         if(lightSample.pdf > 0.f && wiLocal.y > 0.0f)
         {
+            // Visibility の評価は視点に非依存なので 1 回だけで OK
             ShadowPRD shadowPrd;
             uint32_t u0, u1;
             packPointer(&shadowPrd, u0, u1);
+
+            const float3 wi = localToWorld(wiLocal, tangent, Ns, biNormal);
             
-
-            // BSDF の計算
-            int callableFunctionOffset = NUM_LENS_TYPE + material->materialType * 2 + 1; // 登録した順番が lens の後で，materialType * 2 + 1 が 対応するマテリアルの eval 関数 
-            float bxdfValue = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, wiLocal, woLocal, matData, &prd);
-            float bxdfPdf = prd.pdf.bxdf;
-            const float3 wi = localToWorld(wiLocal, tangent, Ns, biNormal); 
-
-
-            // // 光源へ接続して可視性を判断
+            // 光源へ接続して可視性を判断
             optixTrace( 
                 optixLaunchParams.traversable,
                 intersectedPoint, // 出射位置
@@ -527,9 +532,45 @@ extern "C" __global__ void __closesthit__radiance_spectral()
                 u0, u1
             );
 
+
             if(shadowPrd.visible){
-                float weight = balanceHeuristicWeight(1, lightSample.pdf, 1, bxdfPdf);
-                prd.contribution += prd.albedo * lightSample.emission * bxdfValue * wiLocal.y * weight / fmaxf(lightSample.pdf, 1e-7f);
+                // 波長の MIS
+                const float spectralMISWeight = hwssSpectralWeight(prd.logPOrefix);
+
+                constexpr int C = 4;
+                const float invC = 1.0f / (float)C;
+                const float uHero = prd.waveLengthNormalized;
+
+
+                const float pdfLight = fmaxf(lightSample.pdf, 1e-7f);
+
+                // BSDF の計算
+                int callableFunctionOffset = NUM_LENS_TYPE + material->materialType * 2 + 1; // 登録した順番が lens の後で，materialType * 2 + 1 が 対応するマテリアルの eval 関数 
+                
+                // 波長ごとに BSDF を評価
+                for(int k = 0; k < C; ++k){
+                    const float u = wrap01(uHero + float(k) * invC);
+
+                    // 波長を一時的に差し替え
+                    prd.waveLengthNormalized = u;
+                    float bxdfValue = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, wiLocal, woLocal, matData, &prd);
+                    const float bxdfPdf = fmaxf(prd.pdf.bxdf, 1e-7f);
+                    // 戻す
+                    prd.waveLengthNormalized = uHero;
+
+                    // emission の取得
+                    float emission = lightSample.emissionRGB.y;
+                    const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
+                    emission *= (optixLaunchParams.light.lightIntensityFactor  * D65);
+
+                    const float directionalMISWeight = balanceHeuristicWeight(1, pdfLight, 1, bxdfPdf);
+
+                    // throughput
+                    float beta_k = (&prd.beta.x)[k];
+                    (&prd.contribution.x)[k] += emission * beta_k * bxdfValue * wiLocal.y * directionalMISWeight * spectralMISWeight / pdfLight;
+
+                }
+                
             }
         }
         prd.continueTrace = true;
@@ -538,25 +579,54 @@ extern "C" __global__ void __closesthit__radiance_spectral()
     
     // 次の方向の決定
     // BSDF のサンプリング とアルベドの変更
+    constexpr int C = 4;
+    const float invC = 1.0f / (float)C;
+    const float uHero = prd.waveLengthNormalized;
+
+    // BSDF のサンプル (Hero のみ 1 回)
+
     int callableFunctionOffset = NUM_LENS_TYPE + material->materialType * 2;
     const float3 sampledWiLocal = optixDirectCall<float3, const float3, const IntersectedData_Spectral&, PRDSpectral*>(callableFunctionOffset, woLocal, matData, &prd);
     const float3 sampledWi = localToWorld(sampledWiLocal, tangent, Ns, biNormal);
     
-    callableFunctionOffset = NUM_LENS_TYPE + material->materialType * 2 + 1;
-    const float bxdfValue = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, sampledWiLocal, woLocal, matData, &prd);
-
     // if(sampledWiLocal.y < 1e-7f){
     //     prd.continueTrace = false;
     //     return;
     // }
 
+    const float pdfHero = fmaxf(prd.pdf.bxdf, 1e-7f);
+    // BSDF の評価
+    callableFunctionOffset = NUM_LENS_TYPE + material->materialType * 2 + 1;
+    const float bxdfValueHero = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, sampledWiLocal, woLocal, matData, &prd);
+
+
+    // HWSS
+    prd.beta.x *= bxdfValueHero * sampledWiLocal.y / pdfHero;
+    prd.logPOrefix.x += logf(pdfHero);
+    
+    // k = 1 -- C-1
+    const float oldU = prd.waveLengthNormalized;
+    const float oldPdf = prd.pdf.bxdf;
+
+    for(int k = 1; k < C; ++k){
+        const float u = wrap01(uHero + float(k) * invC);
+        prd.waveLengthNormalized = u;
+        const float fk = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, sampledWiLocal, woLocal, matData, &prd);
+        const float pdfk = fmaxf(prd.pdf.bxdf, 1e-7f);
+        (&prd.beta.x)[k] += fk * sampledWiLocal.y / pdfHero;
+        (&prd.logPOrefix.x)[k] += logf(pdfk);
+    }
+
+    prd.waveLengthNormalized = uHero;
+    prd.pdf.bxdf = oldPdf;
+
     prd.position += 1e-3f * Ng;
-    prd.albedo *= bxdfValue * sampledWiLocal.y / fmaxf(prd.pdf.bxdf, 1e-7f);
+    // prd.albedo *= bxdfValue * sampledWiLocal.y / fmaxf(prd.pdf.bxdf, 1e-7f);
     prd.wi = sampledWi; 
     prd.continueTrace = true;
     
-    if(prd.bounce == 0){
-        prd.primaryNormal = Ns;
-        prd.primaryAlbedo = albedoRGB;
-    }
+    // if(prd.bounce == 0){
+    //     prd.primaryNormal = Ns;
+    //     prd.primaryAlbedo = albedoRGB;
+    // }
 }

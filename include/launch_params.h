@@ -5,6 +5,11 @@
 #include "../utils/my_math.hpp"
 #include <cuda_runtime.h>
 
+// #define PHASE_FUNCTION_TABULATED // 0: HG, 1: Tabulated, 2: Neural
+#define PHASE_FUNCTION_HG // 0: HG, 1: Tabulated, 2: Neural
+// #define PHASE_FUNCTION_NEURAL // 0: HG, 1: Tabulated, 2: Neural
+
+
 static constexpr uint32_t MASK_VOLUME  = 0x01u;
 static constexpr uint32_t MASK_SURFACE = 0x02u;
 static constexpr uint32_t MASK_ALL     = MASK_VOLUME | MASK_SURFACE;
@@ -133,7 +138,7 @@ struct TriangleLightData {
     TextureSlot emissiveTexture;
 };
 
-struct LaunchParams {
+struct alignas(16) LaunchParams {
     struct {
         // レンダリング結果を出力するバッファ
         float4* colorBuffer;
@@ -146,7 +151,7 @@ struct LaunchParams {
         int2    size            {make_int2(1280, 720)};
         int     accumID         {0};
         int     numPixelSamples {1};
-        int     maxBounce       {256};
+        int     maxBounce       {2048};
         int     frameID         {0};
     } frame;
 
@@ -211,6 +216,38 @@ struct LaunchParams {
     int numMaterials    {0};
 
     OptixAabb* vdbAABBs;
+
+    struct {
+        cudaTextureObject_t phaseParameterG;
+        cudaTextureObject_t pdf;
+        cudaTextureObject_t cdf;
+        int numTheta;
+        int numLambda;
+        int numDiameter;
+    } mieTexture;
+
+    // ---- NSF / CoopVec packed weights ----
+    static constexpr uint32_t NSF_MAX_TRANSFORMS = 3;
+    static constexpr uint32_t NSF_LAYERS_PER_TRANSFORM = 3;
+    static constexpr uint32_t NSF_LAYERS_PER_TRANSFORM_PADD = 4;
+
+    struct alignas(16) {
+        CUdeviceptr packedBase;   // m_nsfPackedWeights.getDevicePointer()
+        uint32_t    packedBytes;  // total bytes (debug/sanity)
+        uint32_t    transforms;   // e.g. 3
+        uint32_t    inputPad;     // e.g. 16
+        uint32_t    bins;         // e.g. 32 (optional but useful)
+        uint32_t    hidden;       // e.g. 64 (optional)
+        uint32_t    context;      // e.g. 3  (optional)
+
+        // offsets in bytes from packedBase
+        alignas(16) uint32_t wOffset[NSF_MAX_TRANSFORMS][NSF_LAYERS_PER_TRANSFORM];
+        alignas(16) uint32_t bOffset[NSF_MAX_TRANSFORMS][NSF_LAYERS_PER_TRANSFORM];
+
+        // (optional) dims after padding (device側で assert/汎用化に使える)
+        alignas(16) uint16_t N[NSF_MAX_TRANSFORMS][NSF_LAYERS_PER_TRANSFORM];
+        alignas(16) uint16_t K[NSF_MAX_TRANSFORMS][NSF_LAYERS_PER_TRANSFORM];
+    } nsf;
 };
 
 #endif // LAUNCH_PARAMS_H_

@@ -241,7 +241,7 @@ private:
         nanovdb::tools::updateGridStats(hGrid, nanovdb::tools::StatsMode::All);
 
         // 作成できたかどうか確認
-        if(!hGrid->hasMinMax()){
+        if(!hGrid->hasMinMax() || !hGrid->hasBBox()){
             throw std::runtime_error("gridStats failed: grid has no Min/Max.");
         }
 

@@ -7,6 +7,8 @@
 #include "../device/random_number_generator.cuh"
 #include "../../include/launch_params.h"
 #include "../device/trace_volume.cuh"
+#include "../device/phase_function.cuh"
+#include "../device/neural_phase_function.cuh"
 #include <stdio.h>
 
 
@@ -171,16 +173,18 @@ extern "C" __global__ void __closesthit__vdb_radiance_rgb()
     prd.pdf.bxdf = evalPhaseFunction();
     prd.continueTrace = true;
 
-    if(prd.bounce == 0){
-        prd.primaryNormal = make_float3(0.0f); // 媒質なので 0 埋め等
-        prd.primaryAlbedo = make_float3(0.8f);
-    }
+    // if(prd.bounce == 0){
+    //     prd.primaryNormal = make_float3(0.0f); // 媒質なので 0 埋め等
+    //     prd.primaryAlbedo = make_float3(0.8f);
+    // }
     
 }
 
 
 extern "C" __global__ void __closesthit__vdb_radiance_spectral()
 {
+    
+
     PRDSpectral & prd = *getPRD<PRDSpectral>();
     const HitgroupSBTData &sbtData =*(const HitgroupSBTData*) optixGetSbtDataPointer();
 
@@ -191,6 +195,30 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
         prd.continueTrace = false;
         return;
     }
+
+    // {
+    // const LaunchParams& lp = optixLaunchParams;
+
+    
+    // float u = 0.37f;
+
+    // float wavelength = prd.waveLengthNormalized;
+    // float diameter =  0.7f;
+    // const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, wavelength, diameter);
+    
+    // float c0 = diameter;
+    // float c1 = wavelength;
+    // float c2 = g_k;
+
+    
+    // float logp_fwd;
+    // float t = flow_sample_t_and_logpdf(lp, u, c0, c1, c2, logp_fwd);
+
+    // float logp_inv = flow_logpdf_t(lp, t, c0, c1, c2);
+
+    // printf("t=%g  logp_fwd=%g  logp_inv=%g  diff=%g\n",
+    //        t, logp_fwd, logp_inv, logp_fwd - logp_inv);
+    // }
     
     // ray の情報
     const float3 rayDirectionWorld  = normalize(optixGetWorldRayDirection());
@@ -223,6 +251,18 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
     auto acc = grid->getAccessor();
     auto sampler = makeSampler(acc);
 
+    const float uDiameter = (7.5f - 5.0f) / (20.0f - 5.0f);
+
+// #if defined(PHASE_FUNCTION_TABULATED)
+    MiePhaseTex miePhaseTex = {};
+    miePhaseTex.pdfTex = optixLaunchParams.mieTexture.pdf;
+    miePhaseTex.cdfTex = optixLaunchParams.mieTexture.cdf;
+    miePhaseTex.Ntheta = optixLaunchParams.mieTexture.numTheta;
+    miePhaseTex.Nlambda = optixLaunchParams.mieTexture.numLambda;
+    miePhaseTex.Nd = optixLaunchParams.mieTexture.numDiameter;
+// #endif
+
+
     // デルタトラッキング
     float tScatter;
     const bool isScatter = deltaTrack_localMajorant(
@@ -254,10 +294,9 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
         //     RADIANCE_RAY_TYPE,
         //     u0, u1
         // );
-        const float3 scatteredPointObject = rayOriginObject + tScatter * rayDirectionObject;
+        const float3 scatteredPointObject = rayOriginObject + (tExit + 1e-4f) * rayDirectionObject;
         const float3 scatteredPointWorld  = optixTransformPointFromObjectToWorldSpace(scatteredPointObject);
         prd.position = scatteredPointWorld;
-
 
         return;
     }
@@ -280,65 +319,112 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
 
         const int callLightType = NUM_LENS_TYPE + NUM_BXDF + light.lightType;
         LightSample_Spectral lightSample = optixDirectCall<LightSample_Spectral, LightDefinition, PRDSpectral*>(callLightType, light, &prd);
+        const float pdfLight = fmaxf(lightSample.pdf, 1e-7f);
 
-        if(lightSample.pdf > 0.f)
-        {
-            const float3 wiWorld = normalize(lightSample.direction);
-            const float distance = lightSample.distance;
+        
+        const float3 wiWorld = normalize(lightSample.direction);
+        const float distance = lightSample.distance;
 
-            // ratio tracking
-            const float3 wiObject   = optixTransformVectorFromWorldToObjectSpace(wiWorld);
-            float tA0, tA1;
-            float tMediaExit = 0.0f;
-            float transmittance = 1.0f;
-            if(intersectAABB(scatteredPointObject, wiObject, bMin, bMax, 0.0f, distance, tA0, tA1)){
-                const float t0 = fmaxf(0.0f, tA0);
-                const float t1 = fminf(distance, tA1);
-                if(t1 > t0){
-                    transmittance = ratioTrack_localMajorant(
-                        prd, densityScale, grid, acc, sampler,
-                        scatteredPointObject, wiObject,
-                        t0, t1, sigmaTScale
-                    );
-                }
-                tMediaExit = fmaxf(0.0f, t1);
-            }
-            // shadow ray は体積の外から計算
-            const float3 xExitW = scatteredPointWorld + tMediaExit * wiWorld;
-            const float3 newOrigin = xExitW + wiWorld * 1e-3f;
-            const float  shadowTMax = distance - tMediaExit - 1e-3f;
-
-            ShadowPRD shadowPrd;
-            shadowPrd.visible = true;
-            uint32_t u0, u1;
-            packPointer(&shadowPrd, u0, u1);
-            
-            // 光源へ接続して可視性を判断
-            if(shadowTMax > 0.0f){
-                optixTrace( 
-                    optixLaunchParams.traversable,
-                    newOrigin, // 出射位置
-                    wiWorld,
-                    0.0f,
-                    shadowTMax,
-                    0.0f,
-                    OptixVisibilityMask( MASK_SURFACE ),
-                    OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
-                        | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
-                    SHADOW_RAY_TYPE,    // SBT offset
-                    RAY_TYPE_COUNT,     // SBT stride
-                    SHADOW_RAY_TYPE,    // miss SBT Index
-                    u0, u1
+        // ratio tracking
+        const float3 wiObject   = optixTransformVectorFromWorldToObjectSpace(wiWorld);
+        float tA0, tA1;
+        float tMediaExit = 0.0f;
+        float transmittance = 1.0f;
+        if(intersectAABB(scatteredPointObject, wiObject, bMin, bMax, 0.0f, distance, tA0, tA1)){
+            const float t0 = fmaxf(0.0f, tA0);
+            const float t1 = fminf(distance, tA1);
+            if(t1 > t0){
+                transmittance = ratioTrack_localMajorant(
+                    prd, densityScale, grid, acc, sampler,
+                    scatteredPointObject, wiObject,
+                    t0, t1, sigmaTScale
                 );
             }
-            
-            if(shadowPrd.visible && transmittance > 0.0f){
-                const float phasePdf    = evalPhaseFunction();
+            tMediaExit = fmaxf(0.0f, t1);
+        }
+        // shadow ray は体積の外から計算
+        const float3 xExitW = scatteredPointWorld + tMediaExit * wiWorld;
+        const float3 newOrigin = xExitW + wiWorld * 1e-3f;
+        const float  shadowTMax = distance - tMediaExit - 1e-3f;
+
+        ShadowPRD shadowPrd;
+        shadowPrd.visible = true;
+        uint32_t u0, u1;
+        packPointer(&shadowPrd, u0, u1);
+        
+        // 光源へ接続して可視性を判断
+        if(shadowTMax > 0.0f){
+            optixTrace( 
+                optixLaunchParams.traversable,
+                newOrigin, // 出射位置
+                wiWorld,
+                0.0f,
+                shadowTMax,
+                0.0f,
+                OptixVisibilityMask( MASK_SURFACE ),
+                OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
+                    | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+                SHADOW_RAY_TYPE,    // SBT offset
+                RAY_TYPE_COUNT,     // SBT stride
+                SHADOW_RAY_TYPE,    // miss SBT Index
+                u0, u1
+            );
+        }
+        
+        if(shadowPrd.visible && transmittance > 0.0f){
+            // HWSS
+            const float spectralMISWeight = hwssSpectralWeight(prd.logPOrefix);
+            const float cosTheta = dot(rayDirectionWorld, wiWorld); // 散乱角
+
+            constexpr int C = 4; 
+            const float invC = 1.0f / float(C);
+            const float uHero = prd.waveLengthNormalized;
+
+            float baseEmission = lightSample.emissionRGB.y * optixLaunchParams.light.lightIntensityFactor;
+            for(int k = 0; k < C; ++k){
+                const float u = wrap01(uHero + float(k) * invC);
+                prd.waveLengthNormalized = u;
+
+
+#if defined(PHASE_FUNCTION_TABULATED)
+                const float phasePdf = fmaxf(evalPhaseFunctionTabulated(cosTheta, uDiameter, u, miePhaseTex), 1e-20f);
+#elif defined(PHASE_FUNCTION_HG)
+                const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, u, uDiameter);
+                const float phasePdf = fmaxf(evalPhaseFunctionHG(cosTheta, g_k), 1e-20f);
+#else
+                const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, u, uDiameter);
+                const float uNormalized = 2.0f * u - 1.0f;
+                const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
+                const float phasePdf = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uNormalized, g_k), 1e-20f);
+                // const float phasePdfT = fmaxf(evalPhaseFunctionTabulated(cosTheta, uDiameter, u, miePhaseTex), 1e-20f);
+                // const float phasePdfHG = fmaxf(evalPhaseFunctionHG(cosTheta, g_k), 1e-20f);
+                // printf("HG: %f, NF: %f, GT: %f\n", phasePdfHG, phasePdf, phasePdfT);
+                
+                // const float phasePdfp = fmaxf(evalPhaseFunctionNF(optixLaunchParams, 0.999f, uDiameterNormalized, uNormalized, g_k), 1e-20f);
+                // const float phasePdfTp = fmaxf(evalPhaseFunctionTabulated(0.999f, uDiameter, u, miePhaseTex), 1e-20f);
+                // const float phasePdfHGp = fmaxf(evalPhaseFunctionHG(0.999f, g_k), 1e-20f);
+                
+                // const float phasePdfm = fmaxf(evalPhaseFunctionNF(optixLaunchParams, -0.999f, uDiameterNormalized, uNormalized, g_k), 1e-20f);
+                // const float phasePdfTm = fmaxf(evalPhaseFunctionTabulated(-0.999f, uDiameter, u, miePhaseTex), 1e-20f);
+                // const float phasePdfHGm = fmaxf(evalPhaseFunctionHG(-0.999f, g_k), 1e-20f);
+                // printf("HG: p: %f m: %f, NF: p %f m %f, GT: p %f m %f\n", phasePdfHGp, phasePdfHGm, phasePdfp, phasePdfm, phasePdfTp, phasePdfTm);
+#endif
+
                 const float phaseValue  = phasePdf;
 
-                float weight = balanceHeuristicWeight(1, fmaxf(lightSample.pdf, 1e-7f), 1, fmaxf(phasePdf, 1e-7f));
-                prd.contribution += prd.albedo * (transmittance * lightSample.emission) * phaseValue * weight / fmaxf(lightSample.pdf, 1e-7f);
+                prd.waveLengthNormalized = uHero;
+
+                const float directionalMISWeight = balanceHeuristicWeight(1, pdfLight, 1, phasePdf);
+
+                const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
+                float emission = baseEmission * D65;
+
+                // throuput
+                float beta_k = (&prd.beta.x)[k];
+                float add = emission * beta_k * transmittance * phaseValue * directionalMISWeight * spectralMISWeight / pdfLight;
+                (&prd.contribution.x)[k] += add;
             }
+
         }
         prd.continueTrace = true;
     }
@@ -346,15 +432,54 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
     // --------------------------
     // 次の方向の決定（位相関数のサンプリング）
     // --------------------------
-    const float3 newDirection = random_unit_sphere(prd.random(), prd.random());
+    const float uHero = prd.waveLengthNormalized;
+#if defined(PHASE_FUNCTION_TABULATED)
+    PhaseSample ps = samplePhaseFunctionTabulated(rayDirectionWorld, prd.random(), prd.random(), uDiameter, uHero, miePhaseTex);
+#elif defined(PHASE_FUNCTION_HG)
+    const float gHero = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uHero, uDiameter);
+    PhaseSample ps = samplePhaseFunctionHG(rayDirectionWorld, prd.random(), prd.random(), gHero);
+#else
+    const float gHero = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uHero, uDiameter);
+    const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
+    const float uHeroNormalized = uHero * 2.0f - 1.0f;
+    PhaseSample ps = samplePhaseFunctionNF(optixLaunchParams, rayDirectionWorld, prd.random(), prd.random(), uDiameterNormalized, uHeroNormalized, gHero);
+#endif
 
-    prd.wi = newDirection;
-    prd.position += 1e-3f * newDirection;
-    prd.pdf.bxdf = evalPhaseFunction();
+    prd.wi = ps.wi;
+    prd.position += 1e-3f * ps.wi;
+
+    // hero の PDF
+    const float phasePDFHero = fmaxf(ps.pdf, 1e-20f);
+    prd.pdf.bxdf = phasePDFHero;
+    prd.logPOrefix.x += logf(phasePDFHero);
+
+    // HWSS
+    const float cosTheta = dot(rayDirectionWorld, ps.wi); // 散乱角
+    constexpr int C = 4;
+    const float invC = 1.0f / (float)C;
+    for(int k = 1; k < C; ++k)
+    {
+        const float u_k = wrap01(uHero + float(k) * invC);
+
+#if defined(PHASE_FUNCTION_TABULATED)
+        const float phasePdf_k = fmaxf(evalPhaseFunctionTabulated(cosTheta, uDiameter, u_k, miePhaseTex), 1e-20f);
+#elif defined(PHASE_FUNCTION_HG)
+        const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, u_k, uDiameter);
+        const float phasePdf_k = fmaxf(evalPhaseFunctionHG(cosTheta, g_k), 1e-7f);
+#else
+        const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, u_k, uDiameter);
+        const float uNormalized = 2.0f * u_k - 1.0f;
+        const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
+        const float phasePdf_k = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uNormalized, g_k), 1e-7f);
+#endif
+
+        (&prd.logPOrefix.x)[k] += logf(phasePdf_k);
+    }
+    
     prd.continueTrace = true;
 
-    if(prd.bounce == 0){
-        prd.primaryNormal = make_float3(0.0f); // 媒質なので 0 埋め等
-        prd.primaryAlbedo = make_float3(0.8f);
-    }
+    // if(prd.bounce == 0){
+    //     prd.primaryNormal = make_float3(0.0f); // 媒質なので 0 埋め等
+    //     prd.primaryAlbedo = make_float3(0.8f);
+    // }
 }

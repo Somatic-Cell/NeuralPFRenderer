@@ -2,6 +2,10 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
+#include <chrono>
+#include <iostream>
+
+
 
 // --------------------------------------------
 // コンストラクタ
@@ -142,7 +146,14 @@ void GLFWCameraWindow::run()
     resize(make_int2(width, height));
 
     while(!glfwWindowShouldClose(m_handle)){
+        using clock = std::chrono::steady_clock;
+        const auto t0 = clock::now();
         render();
+        save("smoke");
+        const auto t1 = clock::now();
+
+        const auto sec = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0).count();
+        std::cout << "render() wall time: " << sec << " s (" << (sec / 60.0) << " min)\n";
 
         glfwPollEvents();
         if(glfwGetWindowAttrib(m_handle, GLFW_ICONIFIED) != 0){
@@ -160,7 +171,7 @@ void GLFWCameraWindow::run()
             
         draw();        
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    
+        glfwTerminate();
         glfwSwapBuffers(m_handle);
     }
 }

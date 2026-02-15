@@ -69,6 +69,14 @@ if(MSVC)
 endif()
 add_subdirectory(${EXT_DIR}/assimp)
 
+# Assimp が作る「毎回走る」ターゲットを既定ビルドから外す
+if(TARGET UpdateAssimpLibsDebugSymbolsAndDLLs)
+  set_target_properties(UpdateAssimpLibsDebugSymbolsAndDLLs PROPERTIES
+    EXCLUDE_FROM_DEFAULT_BUILD TRUE
+    EXCLUDE_FROM_ALL TRUE
+  )
+endif()
+
 ### DirectXTex
 add_subdirectory(${EXT_DIR}/DirectXTex)
 
@@ -206,6 +214,8 @@ set(
     ${PROJECT_SOURCE_DIR}/shaders/device/random_number_generator.cuh
     ${PROJECT_SOURCE_DIR}/shaders/device/shader_common.cuh
     ${PROJECT_SOURCE_DIR}/shaders/device/trace_volume.cuh
+    ${PROJECT_SOURCE_DIR}/shaders/device/phase_function.cuh
+    ${PROJECT_SOURCE_DIR}/shaders/device/neural_phase_function.cuh
     ${PROJECT_SOURCE_DIR}/shaders/config.cuh
 )
 
@@ -222,6 +232,7 @@ set(CUDA_NVCC_OPTIONS
     "--relocatable-device-code=true"
     "-I${OPTIX_INCLUDE_DIR}"
 )
+
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")   # Debug ビルドのときだけ
     list(APPEND 
@@ -310,6 +321,10 @@ add_executable(${TARGET_NAME}
     "${INCLUDE_DIR}/cuda_buffer.h"
     "${INCLUDE_DIR}/ptx_data_reader.hpp"
     "${INCLUDE_DIR}/application.hpp"
+    "${INCLUDE_DIR}/mie_tables_txt_loader.h"
+    "${INCLUDE_DIR}/safetensors_loader.hpp"
+    "${INCLUDE_DIR}/nsf_hyper_checkpoint.hpp"
+    "${INCLUDE_DIR}/nsf_hyper_coopvec_pack.hpp"
     "${EXT_DIR}/stb/stb_image_write.h"
     "${EXT_DIR}/fpng/src/fpng.h"
     "${EXT_DIR}/fpng/src/fpng.cpp"
