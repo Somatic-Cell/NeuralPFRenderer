@@ -2188,7 +2188,7 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
         std::cerr << "ERROR: readlink() failed" << std::endl;
     }
 #endif
-    std::filesystem::path dataDir = exePath.parent_path().parent_path().parent_path().parent_path() / "weights/flow.safetensors";
+    std::filesystem::path dataDir = exePath.parent_path().parent_path().parent_path().parent_path() / "weights/flow_light.safetensors";
     
     try {
     m_nsfHyperCheckPoint = NsfHyperCheckpoint::Load(dataDir.string());
@@ -2200,8 +2200,8 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
     m_nsfInputPad   = inputPad;
 
     // 3 transforms / 3 layers（あなたの NSF hyper MLP 前提）
-    m_nsfWOffsets.assign((size_t)m_nsfTransforms * 3u, 0u);
-    m_nsfBOffsets.assign((size_t)m_nsfTransforms * 3u, 0u);
+    m_nsfWOffsets.assign((size_t)m_nsfTransforms * 2u, 0u);
+    m_nsfBOffsets.assign((size_t)m_nsfTransforms * 2u, 0u);
 
 
     // ----------------------------
@@ -2218,7 +2218,7 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
             if(l==2){ N = (uint32_t)H.l2.out; K = (uint32_t)H.l2.in;  Kpad = K; }
 
             uint32_t Npack = N;
-            if(l == 2) Npack = 96;
+            if(l == 2) Npack = 64;
 
             std::cout << "[" << l << "] N:" << N << ", Npack" << Npack << ", K: " << K << ", Kpad: " << Kpad << std::endl;
 
@@ -2258,7 +2258,7 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
             const uint32_t Kpad = (l==0) ? inputPad : K;
 
             uint32_t Npack = N;
-            if(l == 2) Npack = 96;
+            if(l == 2) Npack = 64;
             std::vector<uint16_t> Wnxkpad;
             if(l == 2){
                 Wnxkpad.assign((size_t)Npack * (size_t)Kpad, uint16_t(0)); // 96x64
@@ -2411,7 +2411,7 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
                 const uint32_t Kpad = (l==0)? m_nsfInputPad : K;
 
                 uint32_t Npack = N;
-                if(l == 2) Npack = 96;
+                if(l == 2) Npack = 64;
                 
                 P.N[t][l] = (uint16_t)Npack;
                 P.K[t][l] = (uint16_t)Kpad;

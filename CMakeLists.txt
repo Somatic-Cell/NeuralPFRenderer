@@ -227,10 +227,11 @@ set(CUDA_NVCC_OPTIONS
     "--gpu-architecture=compute_${CUDA_CC}"     # GPU の構成
     "--gpu-code=sm_${CUDA_CC}" 
     "-std=${CPP_VER_CUDA}"                  
-    "-cudart" "shared"
+    "-cudart" "hybrid"
     "--use_fast_math"                           # 精度を犠牲に高速な近似計算を実行
     "--relocatable-device-code=true"
     "-I${OPTIX_INCLUDE_DIR}"
+    "-Xptxas=-v"
 )
 
 

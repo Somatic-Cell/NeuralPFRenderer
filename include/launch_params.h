@@ -6,8 +6,8 @@
 #include <cuda_runtime.h>
 
 // #define PHASE_FUNCTION_TABULATED // 0: HG, 1: Tabulated, 2: Neural
-#define PHASE_FUNCTION_HG // 0: HG, 1: Tabulated, 2: Neural
-// #define PHASE_FUNCTION_NEURAL // 0: HG, 1: Tabulated, 2: Neural
+// #define PHASE_FUNCTION_HG // 0: HG, 1: Tabulated, 2: Neural
+#define PHASE_FUNCTION_NEURAL // 0: HG, 1: Tabulated, 2: Neural
 
 
 static constexpr uint32_t MASK_VOLUME  = 0x01u;
@@ -227,7 +227,7 @@ struct alignas(16) LaunchParams {
     } mieTexture;
 
     // ---- NSF / CoopVec packed weights ----
-    static constexpr uint32_t NSF_MAX_TRANSFORMS = 3;
+    static constexpr uint32_t NSF_MAX_TRANSFORMS = 2;
     static constexpr uint32_t NSF_LAYERS_PER_TRANSFORM = 3;
     static constexpr uint32_t NSF_LAYERS_PER_TRANSFORM_PADD = 4;
 
