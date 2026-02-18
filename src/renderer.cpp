@@ -2071,7 +2071,7 @@ void Renderer::loadAssets()
     
     VDBGeomData vdbData {};
     vdbData.nanoGrid        = grid.deviceGridPtr();
-    vdbData.densityScale    = 0.3f;
+    vdbData.densityScale    = 10.0f;
     vdbData.emissionScale   = 1.0f;
 
     m_vdbTable.push_back(vdbData);

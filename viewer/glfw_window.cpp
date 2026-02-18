@@ -38,7 +38,7 @@ MyGLFWWindow::MyGLFWWindow(const std::string & title)
         glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 
 #endif
-    m_handle = glfwCreateWindow(1280, 720, title.c_str(), NULL, NULL);
+    m_handle = glfwCreateWindow(720, 1280, title.c_str(), NULL, NULL);
     if(!m_handle){
         glfwTerminate();
         exit(EXIT_FAILURE);

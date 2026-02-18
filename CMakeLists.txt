@@ -229,9 +229,10 @@ set(CUDA_NVCC_OPTIONS
     "-std=${CPP_VER_CUDA}"                  
     "-cudart" "hybrid"
     "--use_fast_math"                           # 精度を犠牲に高速な近似計算を実行
-    "--relocatable-device-code=true"
+    "--relocatable-device-code=false"
     "-I${OPTIX_INCLUDE_DIR}"
     "-Xptxas=-v"
+    "-Xptxas=--warn-spills"
 )
 
 
@@ -262,10 +263,12 @@ if(USE_OPTIX_IR)
         "--generate-line-info"                      # 行番号を付与し，デバッグツール等でどの行が実行中か追跡可能にするオプション
         "--gpu-architecture=compute_${CUDA_CC}"     # GPU の構成
         "-std=${CPP_VER_CUDA}"
-        "-cudart" "shared"
+        "-cudart" "hybrid"
         "--use_fast_math"                           # 精度を犠牲に高速な近似計算を実行
         "--relocatable-device-code=true"
         "-I${OPTIX_INCLUDE_DIR}"
+        "-Xptxas=-v"
+        "-Xptxas=--warn-spills"
     )
 
     set(NANOVDB_INCLUDE_DIR "${EXT_DIR}/openvdb/nanovdb")
@@ -337,9 +340,8 @@ add_executable(${TARGET_NAME}
 # コンパイル時のマクロ定義の追加
 target_compile_definitions(
     ${TARGET_NAME} PRIVATE
-    /utf-8
-    /fsanitize=address
-    /O2
+    $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
+    $<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/O2>
 )
 
 if (MSVC)

@@ -137,7 +137,7 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
         prd.continueTrace = true;
         prd.bounce = 0;
         prd.pdf.bxdf = 1.0f;
-        prd.pdf.light = 1.0f;
+        // prd.pdf.light = 1.0f;
 
         // スペクトルの決定
         const float wavelengthTexSamplePoint = prd.random();

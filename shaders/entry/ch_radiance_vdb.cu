@@ -37,7 +37,7 @@ extern "C" __global__ void __closesthit__vdb_radiance_rgb()
     const float3 rayDirectionObject = optixTransformVectorFromWorldToObjectSpace(rayDirectionWorld);
     const float3 rayOriginObject    = optixTransformPointFromWorldToObjectSpace(rayOriginWorld);
 
-    prd.instanceID = optixGetInstanceId();
+    // prd.instanceID = optixGetInstanceId();
 
     // AABB
     const int primitiveIndex = optixGetPrimitiveIndex();
@@ -450,7 +450,7 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
 
     // hero の PDF
     const float phasePDFHero = fmaxf(ps.pdf, 1e-20f);
-    prd.pdf.bxdf = phasePDFHero;
+    // prd.pdf.bxdf = phasePDFHero;
     prd.logPOrefix.x += logf(phasePDFHero);
 
     // HWSS

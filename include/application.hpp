@@ -283,7 +283,7 @@ public:
     void copyBufferToSurface();
 
 protected:
-    int2                    m_fbSize            {make_int2(1280, 720)};
+    int2                    m_fbSize            {make_int2(720, 1280)};
     GLuint                  m_fbTexture         {0};        // レンダリング結果を表示する OpenGL テクスチャ 
     cudaGraphicsResource_t  m_cudaTexResource   {nullptr};
     Renderer                m_renderer;

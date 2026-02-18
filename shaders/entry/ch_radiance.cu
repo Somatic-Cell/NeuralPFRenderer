@@ -34,7 +34,7 @@ extern "C" __global__ void __closesthit__radiance_rgb()
     const float3 intersectedPoint = optixGetWorldRayOrigin() + rayLength * rayDirection;
 
     // 形状処理用. 面法線を取得
-    prd.instanceID = optixGetInstanceId();
+    // prd.instanceID = optixGetInstanceId();
     const float3 &V1 = optixTransformPointFromObjectToWorldSpace(mesh.vertex[vertexIndex.x]);
     const float3 &V2 = optixTransformPointFromObjectToWorldSpace(mesh.vertex[vertexIndex.y]);
     const float3 &V3 = optixTransformPointFromObjectToWorldSpace(mesh.vertex[vertexIndex.z]);

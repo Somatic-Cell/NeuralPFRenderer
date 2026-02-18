@@ -44,7 +44,7 @@ struct PRDSpectral {
     float  waveLengthNormalized; // 0-1, テクスチャフェッチ用
     
     struct{
-        float light;
+        // float light;
         float bxdf;
     } pdf;
     
