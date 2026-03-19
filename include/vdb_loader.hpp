@@ -96,6 +96,9 @@ public:
         {
             throw std::runtime_error("no FloatGrid found in VDB file: " + vdbPath);
         }
+
+        // 明示的に選んでいない場合でも，安定した primary の名前を決める
+        m_primaryGridName = chooseDefaultDensityLikeName();
     }
 
     // 指定したグリッド名だけをロード
@@ -131,6 +134,35 @@ public:
         if(m_grids.empty()) {
             throw std::runtime_error("No grids loaded from VDB file: " + vdbPath); 
         }
+
+        m_primaryGridName = chooseDefaultDensityLikeName();
+
+    }
+
+    // ファイル内から density-like な FloatGrid を 1 本選んで読む
+    void loadDensityLikeFloatGrid(const std::string& vdbPath)
+    {
+        ensureOpenVDBInitialized();
+
+        openvdb::io::File file(vdbPath);
+        file.open();
+
+        std::vector<std::string> floatGridNames;
+        auto grids = file.getGrids();
+        for (auto& base : *grids) {
+            auto floatGrid = openvdb::gridPtrCast<openvdb::FloatGrid>(base);
+            if (!floatGrid) continue;
+            floatGridNames.push_back(base->getName());
+        }
+        file.close();
+
+        if (floatGridNames.empty()) {
+            throw std::runtime_error("no FloatGrid found in VDB file: " + vdbPath);
+        }
+
+        const std::string selected = chooseDensityLikeNameFromCandidates(floatGridNames);
+        loadSelectedFloatGrids(vdbPath, { selected });
+        m_primaryGridName = selected;
     }
 
     bool hasGrid(const std::string& name) const 
@@ -147,6 +179,22 @@ public:
         return it->second;
     }
 
+    const NanoVDBGrid& getPrimaryGrid() const
+    {
+        if (m_primaryGridName.empty()) {
+            throw std::runtime_error("Primary grid is not selected.");
+        }
+        return getGrid(m_primaryGridName);
+    }
+
+    const std::string& getPrimaryGridName() const
+    {
+        if (m_primaryGridName.empty()) {
+            throw std::runtime_error("Primary grid name is empty.");
+        }
+        return m_primaryGridName;
+    }
+
     std::vector<std::string> getListGridNames() const 
     {
         std::vector<std::string> names;
@@ -159,21 +207,23 @@ public:
     // Density らしい名前を優先して返す
     std::string chooseDefaultDensityLikeName() const
     {
-        const std::vector<std::string> preferred = {"density", "dens", "cloud", "fog", "volume"};
+    //     const std::vector<std::string> preferred = {"density", "dens", "cloud", "fog", "volume"};
         
-        // 候補を探す
-        for (const auto& want : preferred) {
-            for(const auto& kv : m_grids){
-                if(isEquals(kv.first, want)) return kv.first;
-            }
-        }
+    //     // 候補を探す
+    //     for (const auto& want : preferred) {
+    //         for(const auto& kv : m_grids){
+    //             if(isEquals(kv.first, want)) return kv.first;
+    //         }
+    //     }
 
-        // なければ一番最初を返す
-        return m_grids.begin()->first;
+    //     // なければ一番最初を返す
+    //     return m_grids.begin()->first;
+        return chooseDensityLikeNameFromCandidates(getListGridNames());
     }
 
     std::string m_path;
     std::unordered_map<std::string, NanoVDBGrid> m_grids;
+    std::string m_primaryGridName;
 
 
 
@@ -186,6 +236,48 @@ private:
         return true;
     }
 
+
+    static bool containsIgnoreCase(const std::string& text, const std::string& needle)
+    {
+        auto lower = [](const std::string& s) {
+            std::string out = s;
+            for (char& c : out) c = (char)std::tolower((unsigned char)c);
+            return out;
+        };
+        const std::string lhs = lower(text);
+        const std::string rhs = lower(needle);
+        return lhs.find(rhs) != std::string::npos;
+    }
+
+    static std::string chooseDensityLikeNameFromCandidates(std::vector<std::string> names)
+    {
+        if (names.empty()) {
+            throw std::runtime_error("No candidate grid names.");
+        }
+
+        std::sort(names.begin(), names.end());
+
+        const std::vector<std::string> preferredExact = {
+            "density", "dens", "cloud", "fog", "volume"
+        };
+        for (const auto& want : preferredExact) {
+            for (const auto& name : names) {
+                if (isEquals(name, want)) return name;
+            }
+        }
+
+        const std::vector<std::string> preferredContains = {
+            "density", "dens", "cloud", "fog", "volume"
+        };
+        for (const auto& want : preferredContains) {
+            for (const auto& name : names) {
+                if (containsIgnoreCase(name, want)) return name;
+            }
+        }
+
+        // fallback は unordered_map の begin() ではなく、ソート済み先頭で安定化
+        return names.front();
+    }
     
     static NanoVDBGrid buildFromFloatGrid(openvdb::FloatGrid& floatGrid){
         NanoVDBGrid out;

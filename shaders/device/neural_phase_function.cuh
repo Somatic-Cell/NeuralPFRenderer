@@ -19,7 +19,7 @@ static constexpr int PHI_PAD = 64;
 
 // ---- NSF constants (zuko 1.5.0 defaults unless overridden) ----
 static constexpr int   NSF_BINS  = 21;
-static constexpr int   NSF_PHI   = 3 * NSF_BINS - 1; // 95
+static constexpr int   NSF_PHI   = 3 * NSF_BINS - 1; // 62
 static constexpr float NSF_BOUND = 2.5f;
 static constexpr float NSF_SLOPE = 1e-3f;
 
@@ -202,17 +202,17 @@ static __forceinline__ __device__
 void softmax_32(const float in[NSF_BINS], float out[NSF_BINS])
 {
     float m = in[0];
-    #pragma unroll 8
+    #pragma unroll 4
     for (int i = 1; i < NSF_BINS; ++i) m = fmaxf(m, in[i]);
 
     float sum = 0.0f;
-    #pragma unroll 8
+    #pragma unroll 4
     for (int i = 0; i < NSF_BINS; ++i) {
         out[i] = __expf(in[i] - m);
         sum += out[i];
     }
     const float inv = 1.0f / fmaxf(sum, 1e-20f);
-    #pragma unroll 8
+    #pragma unroll 4
     for (int i = 0; i < NSF_BINS; ++i) out[i] *= inv;
 }
 
@@ -341,7 +341,7 @@ void rqs_forward_and_ladj(const Rqs1D& rqs, float x, float& y, float& ladj)
     ladj = logf(fmaxf(J, 1e-30f));
 }
 
-static __forceinline__ __device__
+static __device__
 // static __noinline__ __device__
 void rqs_forward_and_ladj_from_phiV(const VOut& yphi, float x, float& y, float& ladj,
                                     float bound = NSF_BOUND, float slope = NSF_SLOPE)
@@ -538,7 +538,7 @@ void rqs_inverse_and_ladj_fwd(const Rqs1D& rqs, float y, float& x, float& ladj_f
     ladj_fwd = logf(fmaxf(J, 1e-30f));
 }
 
-static __forceinline__ __device__
+static __device__
 // static __noinline__ __device__
 void rqs_inverse_and_ladj_fwd_from_phiV(const VOut& yphi, float y, float& x, float& ladj_fwd,
                                         float bound = NSF_BOUND, float slope = NSF_SLOPE)
@@ -805,7 +805,7 @@ float flow_sample_t_and_logpdf_phiCached(const NSFPhiCache& cache, float u_base,
     return y; // t
 }
 
-static __forceinline__ __device__
+static  __device__
 float evalPhaseFunctionNF_phiCached(const NSFPhiCache& cache, float cosTheta)
 {
     float mu = clamp(cosTheta, -1.0f + NSF_EPS, 1.0f - NSF_EPS);
@@ -817,7 +817,7 @@ float evalPhaseFunctionNF_phiCached(const NSFPhiCache& cache, float cosTheta)
     return __expf(logp_t) / denom;
 }
 
-static __forceinline__ __device__
+static __device__
 PhaseSample samplePhaseFunctionNF_phiCached(const NSFPhiCache& cache,
                                             const float3& woWorld, float u1, float u2)
 {
@@ -850,7 +850,6 @@ PhaseSample samplePhaseFunctionNF_phiCached(const NSFPhiCache& cache,
 
 
 
-// static __noinline__ __device__
 static __device__
 float flow_logpdf_t(const LaunchParams& lp, float t, float c0, float c1, float c2)
 {
@@ -881,7 +880,6 @@ float flow_logpdf_t(const LaunchParams& lp, float t, float c0, float c1, float c
 
 
 static __device__
-// static __noinline__ __device__
 float flow_sample_t_and_logpdf(const LaunchParams& lp,
                                float u_base, float c0, float c1, float c2,
                                float& out_logp_t)
@@ -909,9 +907,14 @@ float flow_sample_t_and_logpdf(const LaunchParams& lp,
     return y; // t
 }
 
-// static __forceinline__ __device__
 static __device__
-float evalPhaseFunctionNF(const LaunchParams& lp, float cosTheta, float c0, float c1, float g)
+float evalPhaseFunctionNF(
+    const LaunchParams& lp, 
+    float cosTheta, 
+    float c0,   // diameter
+    float c1,   // wavelength
+    float g
+)
 {
     // cosTheta は与えられるので t に戻す（atanh 安定化）
     float mu = clamp(cosTheta, -1.0f + NSF_EPS, 1.0f - NSF_EPS);
@@ -925,7 +928,6 @@ float evalPhaseFunctionNF(const LaunchParams& lp, float cosTheta, float c0, floa
     return pdf;
 }
 
-// static __forceinline__ __device__
 static __device__
 PhaseSample samplePhaseFunctionNF(const LaunchParams& lp,
                                   const float3& woWorld, float u1, float u2,

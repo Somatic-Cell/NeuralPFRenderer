@@ -422,4 +422,103 @@ __device__ __forceinline__ float wrap01(float u)
     return fminf(u, nextafterf(1.0f, 0.0f));
 }
 
+struct SampledWavelength
+{
+    float lambda;  // sampled wavelength
+    float pdf;     // continuous pdf p(lambda)
+    int   bin;     // sampled bin index
+};
+
+static __forceinline__ __device__
+float clampUnitFloat(float u)
+{
+    // largest float < 1.0f
+    const float oneMinusEps = 0x1.fffffep-1f;
+    return fminf(fmaxf(u, 0.0f), oneMinusEps);
+}
+
+static __forceinline__ __device__
+int findCdfBin(const float* cdf, int numBins, float u)
+{
+    int lo = 0;
+    int hi = numBins - 1;
+
+    while (lo < hi) {
+        const int mid = (lo + hi) >> 1;
+
+        // cdf[mid+1] <= u なら右側へ
+        if (u >= cdf[mid + 1]) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    return lo;
+}
+
+static __forceinline__ __device__
+SampledWavelength sampleWavelengthFromCdf(
+    const SpectralParams& spectral,
+    float u)
+{
+    SampledWavelength result{};
+
+    u = clampUnitFloat(u);
+
+    const int   N       = spectral.wavelengthBinCount;
+    const float lambda0 = spectral.wavelengthMin;
+    const float dLambda = spectral.wavelengthBinWidth;
+
+    const int bin = findCdfBin(spectral.wavelengthCdf, N, u);
+
+    const float c0 = spectral.wavelengthCdf[bin];
+    const float c1 = spectral.wavelengthCdf[bin + 1];
+    const float pmass = fmaxf(c1 - c0, 0.0f);   // bin probability mass
+
+    // u をその bin の局所座標 [0,1) に再マップ
+    float xi = 0.5f;
+    if (pmass > 0.0f) {
+        xi = (u - c0) / pmass;
+    }
+    xi = clampUnitFloat(xi);
+
+    const float lamMinBin = lambda0 + float(bin) * dLambda;
+    const float lambda    = lamMinBin + xi * dLambda;
+
+    result.lambda = lambda;
+    result.pdf    = (pmass > 0.0f) ? (pmass / dLambda) : 0.0f;
+    result.bin    = bin;
+    return result;
+}
+
+static __forceinline__ __device__
+float evalWavelengthPdf(
+    const SpectralParams& spectral,
+    float lambdaNormalized)
+{
+    if (lambdaNormalized < 0.0f || lambdaNormalized >= 1.0f) {
+        return 0.0f;
+    }
+
+    const float x = lambdaNormalized * float(spectral.wavelengthBinCount);
+    int bin = (int)x;
+    bin = max(0, min(bin, spectral.wavelengthBinCount - 1));
+
+    const float pmass = fmaxf(spectral.wavelengthPdf[bin], 0.0f);
+    return pmass * spectral.wavelengthBinCount;
+}
+
+static __forceinline__ __device__
+void makeONB(const float3& w, float3& t, float3& b)
+{
+    if(fabsf(w.z) < 0.999f){
+        const float a = 1.0f / sqrtf(fmaxf(1e-20f, 1.0f - w.z * w.z));
+        t = make_float3(-w.y * a, w.x * a, 0.0f);
+    } else {
+        const float a = 1.0f / sqrtf(fmaxf(1e-20f, 1.0f - w.x * w.x));
+        t = make_float3(0.0f, -w.z * a, w.y * a);
+    }
+    b = cross(w, t);
+}
 #endif // SHADER_COMMON_CUH_

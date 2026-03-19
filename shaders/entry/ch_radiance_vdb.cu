@@ -9,6 +9,7 @@
 #include "../device/trace_volume.cuh"
 #include "../device/phase_function.cuh"
 #include "../device/neural_phase_function.cuh"
+#include "../device/atmosphere_sampling_device.cuh"
 #include <stdio.h>
 
 
@@ -195,30 +196,6 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
         prd.continueTrace = false;
         return;
     }
-
-    // {
-    // const LaunchParams& lp = optixLaunchParams;
-
-    
-    // float u = 0.37f;
-
-    // float wavelength = prd.waveLengthNormalized;
-    // float diameter =  0.7f;
-    // const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, wavelength, diameter);
-    
-    // float c0 = diameter;
-    // float c1 = wavelength;
-    // float c2 = g_k;
-
-    
-    // float logp_fwd;
-    // float t = flow_sample_t_and_logpdf(lp, u, c0, c1, c2, logp_fwd);
-
-    // float logp_inv = flow_logpdf_t(lp, t, c0, c1, c2);
-
-    // printf("t=%g  logp_fwd=%g  logp_inv=%g  diff=%g\n",
-    //        t, logp_fwd, logp_inv, logp_fwd - logp_inv);
-    // }
     
     // ray の情報
     const float3 rayDirectionWorld  = normalize(optixGetWorldRayDirection());
@@ -353,23 +330,23 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
         packPointer(&shadowPrd, u0, u1);
         
         // 光源へ接続して可視性を判断
-        if(shadowTMax > 0.0f){
-            optixTrace( 
-                optixLaunchParams.traversable,
-                newOrigin, // 出射位置
-                wiWorld,
-                0.0f,
-                shadowTMax,
-                0.0f,
-                OptixVisibilityMask( MASK_SURFACE ),
-                OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
-                    | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
-                SHADOW_RAY_TYPE,    // SBT offset
-                RAY_TYPE_COUNT,     // SBT stride
-                SHADOW_RAY_TYPE,    // miss SBT Index
-                u0, u1
-            );
-        }
+        // if(shadowTMax > 0.0f){
+        //     optixTrace( 
+        //         optixLaunchParams.traversable,
+        //         newOrigin, // 出射位置
+        //         wiWorld,
+        //         0.0f,
+        //         shadowTMax,
+        //         0.0f,
+        //         OptixVisibilityMask( MASK_SURFACE ),
+        //         OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT
+        //             | OPTIX_RAY_FLAG_DISABLE_CLOSESTHIT,
+        //         SHADOW_RAY_TYPE,    // SBT offset
+        //         RAY_TYPE_COUNT,     // SBT stride
+        //         SHADOW_RAY_TYPE,    // miss SBT Index
+        //         u0, u1
+        //     );
+        // }
         
         if(shadowPrd.visible && transmittance > 0.0f){
             // HWSS
@@ -379,49 +356,66 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
             constexpr int C = 4; 
             const float invC = 1.0f / float(C);
             const float uHero = prd.waveLengthNormalized;
+            float phasePdfHeroForMIS = 0.0f;
+            // float baseEmission = lightSample.emissionRGB.y * optixLaunchParams.light.lightIntensityFactor;
+            
+#if defined(PHASE_FUNCTION_TABULATED)
+            phasePdfHeroForMIS = fmaxf(evalPhaseFunctionTabulated(cosTheta, uDiameter, uHero, miePhaseTex), 1e-20f);
+#elif defined(PHASE_FUNCTION_HG)
+            const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uHero, uDiameter);
+            phasePdfHeroForMIS = fmaxf(evalPhaseFunctionHG(cosTheta, g_k), 1e-20f);
+#else
+            const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uHero, uDiameter);
+            const float uNormalized = 2.0f * uHero - 1.0f;
+            const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
+            phasePdfHeroForMIS = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uNormalized, g_k), 1e-20f);
+#endif
 
-            float baseEmission = lightSample.emissionRGB.y * optixLaunchParams.light.lightIntensityFactor;
+            // const float phaseValue  = phasePdf;
+
+            const float directionalMISWeight = balanceHeuristicWeight(1, pdfLight, 1, phasePdfHeroForMIS);
+            
             for(int k = 0; k < C; ++k){
                 const float u = wrap01(uHero + float(k) * invC);
-                prd.waveLengthNormalized = u;
 
+                float phaseValueK = 0.0f;
 
 #if defined(PHASE_FUNCTION_TABULATED)
-                const float phasePdf = fmaxf(evalPhaseFunctionTabulated(cosTheta, uDiameter, u, miePhaseTex), 1e-20f);
+                phaseValueK = fmaxf(evalPhaseFunctionTabulated(cosTheta, uDiameter, u, miePhaseTex), 1e-20f);
 #elif defined(PHASE_FUNCTION_HG)
                 const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, u, uDiameter);
-                const float phasePdf = fmaxf(evalPhaseFunctionHG(cosTheta, g_k), 1e-20f);
+                phaseValueK = fmaxf(evalPhaseFunctionHG(cosTheta, g_k), 1e-20f);
 #else
                 const float g_k = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, u, uDiameter);
                 const float uNormalized = 2.0f * u - 1.0f;
                 const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
-                const float phasePdf = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uNormalized, g_k), 1e-20f);
-                // const float phasePdfT = fmaxf(evalPhaseFunctionTabulated(cosTheta, uDiameter, u, miePhaseTex), 1e-20f);
-                // const float phasePdfHG = fmaxf(evalPhaseFunctionHG(cosTheta, g_k), 1e-20f);
-                // printf("HG: %f, NF: %f, GT: %f\n", phasePdfHG, phasePdf, phasePdfT);
-                
-                // const float phasePdfp = fmaxf(evalPhaseFunctionNF(optixLaunchParams, 0.999f, uDiameterNormalized, uNormalized, g_k), 1e-20f);
-                // const float phasePdfTp = fmaxf(evalPhaseFunctionTabulated(0.999f, uDiameter, u, miePhaseTex), 1e-20f);
-                // const float phasePdfHGp = fmaxf(evalPhaseFunctionHG(0.999f, g_k), 1e-20f);
-                
-                // const float phasePdfm = fmaxf(evalPhaseFunctionNF(optixLaunchParams, -0.999f, uDiameterNormalized, uNormalized, g_k), 1e-20f);
-                // const float phasePdfTm = fmaxf(evalPhaseFunctionTabulated(-0.999f, uDiameter, u, miePhaseTex), 1e-20f);
-                // const float phasePdfHGm = fmaxf(evalPhaseFunctionHG(-0.999f, g_k), 1e-20f);
-                // printf("HG: p: %f m: %f, NF: p %f m %f, GT: p %f m %f\n", phasePdfHGp, phasePdfHGm, phasePdfp, phasePdfm, phasePdfTp, phasePdfTm);
+                phaseValueK = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uNormalized, g_k), 1e-20f);
 #endif
 
-                const float phaseValue  = phasePdf;
+                float emissionK = 0.0f;
+                if(light.lightType == LIGHT_TYPE_SKY){
+                    const float3 sunDir = atmo::sunDirFromAngles(
+                        optixLaunchParams.sunParams.sunZenithRad,
+                        optixLaunchParams.sunParams.sunAzimuthRad
+                    );
+                    const atmo::SkySamplingConfig config;
+                    emissionK = atmo::evalSkyMissSpectralFixedObserver(
+                        optixLaunchParams.atmo,
+                        config,
+                        optixLaunchParams.spectral.D65,
+                        u,
+                        wiWorld,
+                        sunDir
+                    );
+                }
 
-                prd.waveLengthNormalized = uHero;
 
-                const float directionalMISWeight = balanceHeuristicWeight(1, pdfLight, 1, phasePdf);
-
-                const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
-                float emission = baseEmission * D65;
+                // const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
+                // float emission = baseEmission * D65;
 
                 // throuput
                 float beta_k = (&prd.beta.x)[k];
-                float add = emission * beta_k * transmittance * phaseValue * directionalMISWeight * spectralMISWeight / pdfLight;
+                float add = emissionK * beta_k * transmittance * phaseValueK * directionalMISWeight * spectralMISWeight / pdfLight;
                 (&prd.contribution.x)[k] += add;
             }
 
@@ -450,14 +444,15 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
 
     // hero の PDF
     const float phasePDFHero = fmaxf(ps.pdf, 1e-20f);
-    // prd.pdf.bxdf = phasePDFHero;
+    prd.pdf.bxdf = phasePDFHero;
     prd.logPOrefix.x += logf(phasePDFHero);
 
-    // HWSS
     const float cosTheta = dot(rayDirectionWorld, ps.wi); // 散乱角
+    
+    // HWSS
     constexpr int C = 4;
     const float invC = 1.0f / (float)C;
-    for(int k = 1; k < C; ++k)
+    for(int k = 0; k < C; ++k)
     {
         const float u_k = wrap01(uHero + float(k) * invC);
 
@@ -473,11 +468,14 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
         const float phasePdf_k = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uNormalized, g_k), 1e-7f);
 #endif
 
-        (&prd.logPOrefix.x)[k] += logf(phasePdf_k);
+        (&prd.logPOrefix.x)[k] += (k == 0) ? 0.0f : logf(phasePdf_k);
+        // (&prd.logPOrefix.x)[k] += logf(phasePdf_k);
+        float& beta_k = (&prd.beta.x)[k];
+        beta_k *= phasePdf_k / phasePDFHero;
     }
     
     prd.continueTrace = true;
-
+    
     // if(prd.bounce == 0){
     //     prd.primaryNormal = make_float3(0.0f); // 媒質なので 0 埋め等
     //     prd.primaryAlbedo = make_float3(0.8f);

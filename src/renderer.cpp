@@ -130,6 +130,8 @@ Renderer::Renderer(std::vector<const Model*> models, sceneIO::Scene sceneDesc) :
     buildSBT();
 
     createTextures();
+
+    loadAtmosphere();
     
     m_launchParamsBuffer.alloc(sizeof(m_launchParams)); 
     std::cout << "# Atmospheric RT: context, module, pipeline, etc, all set up ..." << std::endl;
@@ -744,7 +746,7 @@ void Renderer::createContext()
 void Renderer::createOptiXModule()
 {
     m_moduleCompileOptions                      = {};
-    m_moduleCompileOptions.maxRegisterCount     = 50;
+    // m_moduleCompileOptions.maxRegisterCount     = 40;
     // m_moduleCompileOptions.optLevel             = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
     m_moduleCompileOptions.optLevel             = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
     m_moduleCompileOptions.debugLevel           = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
@@ -773,7 +775,7 @@ void Renderer::createOptiXModule()
 
     for(size_t i = 0; i < m_optixModuleFileNames.size(); i++){
         std::vector<char> ptxCode = readData(m_optixModuleFileNames[i]);
-        char log[2048];
+        char log[8192];
         size_t sizeOfLog = sizeof(log);
 
     // モジュールの作成
@@ -847,7 +849,7 @@ void Renderer::createMissPrograms()
     // m_missPrograms に radiance ray を登録
     if(m_sceneDesc.integrator.applySpectralRendering){
         // pgDesc.miss.entryFunctionName = "__miss__radiance_spectral";
-        pgDesc.miss.entryFunctionName = "__miss__radiance_noEnvMap_spectral";
+        pgDesc.miss.entryFunctionName = "__miss__radiance_sky_spectral";
     } else {
         // pgDesc.miss.entryFunctionName = "__miss__radiance_rgb";
         pgDesc.miss.entryFunctionName = "__miss__radiance_noEnvMap_rgb";
@@ -1064,6 +1066,16 @@ void Renderer::createCallablePrograms()
     pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)];
     if(m_sceneDesc.integrator.applySpectralRendering){
         pgd->callables.entryFunctionNameDC    = "__direct_callable__light_triangle_spectral";
+    } else {
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__light_triangle_rgb";
+    }
+    // 空
+    pgd = &pgDesc[offset + LIGHT_TYPE_SKY];
+    pgd->kind                             = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+    pgd->flags                            = OPTIX_PROGRAM_GROUP_FLAGS_NONE;
+    pgd->callables.moduleDC               = m_module[static_cast<int>(OptixModuleIdentifier::OPTIX_MODULE_ID_LIGHTSAMPLE)];
+    if(m_sceneDesc.integrator.applySpectralRendering){
+        pgd->callables.entryFunctionNameDC    = "__direct_callable__light_sky_spectral";
     } else {
         pgd->callables.entryFunctionNameDC    = "__direct_callable__light_triangle_rgb";
     }
@@ -1618,6 +1630,12 @@ void Renderer::createLightTable()
 
     // m_lightDefinitionTable.push_back(lightDefinition);
 
+    // 空の LUT を登録
+    LightDefinition lightDefinition;
+    lightDefinition.lightType = LIGHT_TYPE_SKY;
+    lightDefinition.lightIndexInType = 0;
+    m_lightDefinitionTable.push_back(lightDefinition);
+
     // 三角形の面光源を登録
     m_triangleLightDataTable.clear();
 
@@ -1706,6 +1724,26 @@ float Renderer::getExposure() const{
     return m_exposure;
 }
 
+void Renderer::setZenith(float zenithRad)
+{
+    m_launchParams.sunParams.sunZenithRad = zenithRad;
+}
+
+float Renderer::getZenith() const 
+{
+    return m_launchParams.sunParams.sunZenithRad;
+}
+
+void Renderer::setAzimuth(float azimuthRad)
+{
+    m_launchParams.sunParams.sunAzimuthRad = azimuthRad;
+}
+
+float Renderer::getAzimuth() const
+{
+    return m_launchParams.sunParams.sunAzimuthRad;
+}
+
 void Renderer::uploadSpectrumData()
 {
     std::filesystem::path exePath;
@@ -1738,6 +1776,11 @@ void Renderer::uploadSpectrumData()
     }
     
     m_D65 = loadSpectrumDataFromCSV(D65Dir.string(), 0, 1);
+
+    m_wavelengthMin = fmaxf(fmaxf(m_xyz[0].lambdaMin, m_D65.lambdaMin), m_rgbUpSamplingBasis[0].lambdaMin);
+    m_wavelengthMax = fminf(fminf(m_xyz[0].lambdaMax, m_D65.lambdaMax), m_rgbUpSamplingBasis[0].lambdaMax);
+    m_launchParams.spectral.wavelengthMin = m_wavelengthMin;
+    m_launchParams.spectral.wavelengthMax = m_wavelengthMax;
 
     // アップロード
     for(int i = 0; i < 3; ++i) {
@@ -1810,9 +1853,9 @@ void Renderer::uploadSpectrumData()
     }
     float D65Average = D65Sum / (float)N;
     std::cout << "D65: " << D65Sum << std::endl;
-    for(int i = 0; i < m_D65.data.size(); ++i){
-        m_D65.data[i] /= D65Average * 5.0f;
-    }
+    // for(int i = 0; i < m_D65.data.size(); ++i){
+    //     m_D65.data[i] /= D65Average * 5.0f;
+    // }
 
     cudaChannelFormatDesc channel_desc;
     channel_desc = cudaCreateChannelDesc<float>();
@@ -1842,12 +1885,32 @@ void Renderer::uploadSpectrumData()
     m_D65Object = cudaTex;
     m_launchParams.spectral.D65 = cudaTex;
 
+    // wavelength importance sampling table
+    const int numBins = int(m_xyz[1].data.size()) - 1;
+    m_wavelengthBinCount = numBins;
+    m_wavelengthBinWidth = (m_wavelengthMax - m_wavelengthMin) / float(numBins);
 
 
-    m_wavelengthMin = fmaxf(fmaxf(m_xyz[0].lambdaMin, m_D65.lambdaMin), m_rgbUpSamplingBasis[0].lambdaMin);
-    m_wavelengthMax = fminf(fminf(m_xyz[0].lambdaMax, m_D65.lambdaMax), m_rgbUpSamplingBasis[0].lambdaMax);
-    m_launchParams.spectral.wavelengthMin = m_wavelengthMin;
-    m_launchParams.spectral.wavelengthMax = m_wavelengthMax;
+    // y のみ: illuminant = nullptr
+    // y * D65 なら &m_d65
+    buildWavelengthSamplingTable(
+        m_xyz[1],
+        &m_D65,
+        m_wavelengthMin,
+        m_wavelengthMax,
+        numBins,
+        m_wavelengthPdfHost,
+        m_wavelengthCdfHost
+    );
+
+    m_wavelengthPdfBuffer.allocAndUpload(m_wavelengthPdfHost);
+    m_wavelengthCdfBuffer.allocAndUpload(m_wavelengthCdfHost);
+
+    m_launchParams.spectral.wavelengthPdf = (float*)m_wavelengthPdfBuffer.getDevicePointer();
+    m_launchParams.spectral.wavelengthCdf = (float*)m_wavelengthCdfBuffer.getDevicePointer();
+    m_launchParams.spectral.wavelengthBinCount = m_wavelengthBinCount;
+    m_launchParams.spectral.wavelengthBinWidth = m_wavelengthBinWidth;
+
 
 }
 
@@ -1934,12 +1997,15 @@ void Renderer::loadVDB()
 #endif
             std::filesystem::path vdbDir = exePath.parent_path().parent_path().parent_path().parent_path() / "model/vdb" / obj.file;
             std::cout << "VDB Path:" << vdbDir << std::endl;
-            m_vdbAssets->loadAllFloatGrids(vdbDir.string());
+            // m_vdbAssets->loadAllFloatGrids(vdbDir.string());
+            m_vdbAssets->loadDensityLikeFloatGrid(vdbDir.string());
             float bMin[3];
             float bMax[3];
 
-            const auto& grids = m_vdbAssets->m_grids;
-            const NanoVDBGrid& grid = grids.begin()->second;
+            // const auto& grids = m_vdbAssets->m_grids;
+            // const NanoVDBGrid& grid = grids.begin()->second;
+            const NanoVDBGrid& grid = m_vdbAssets->getPrimaryGrid();
+            std::cout << "[NanoVDB] primary grid = " << m_vdbAssets->getPrimaryGridName() << std::endl;
 
             std::copy(grid.worldMin.begin(), grid.worldMin.end(), bMin);
             std::copy(grid.worldMax.begin(), grid.worldMax.end(), bMax);
@@ -2071,7 +2137,7 @@ void Renderer::loadAssets()
     
     VDBGeomData vdbData {};
     vdbData.nanoGrid        = grid.deviceGridPtr();
-    vdbData.densityScale    = 10.0f;
+    vdbData.densityScale    = 1.0f;
     vdbData.emissionScale   = 1.0f;
 
     m_vdbTable.push_back(vdbData);
@@ -2433,4 +2499,126 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
         std::cout << "packedBase=" << (void*)base
           << " mod64=" << (base & 63ull) << "\n";
     }
+}
+
+float Renderer::sampleSpectrumLinearCPU(const SpectrumData& spectrumData, float lambda)
+{
+    if(spectrumData.data.empty()) return 0.0f;
+    if(spectrumData.data.size() == 1) return spectrumData.data[0];
+
+    const float t = (lambda - spectrumData.lambdaMin) / (spectrumData.lambdaMax - spectrumData.lambdaMin);
+    const float x = std::clamp(t, 0.0f, 1.0f) * float (spectrumData.data.size() - 1);
+    const int i0 = std::min(int(std::floor(x)), int(spectrumData.data.size() - 2));
+    const int i1 = i0 + 1;
+    const float a = x - float(i0);
+
+    return (1.0f - a) * spectrumData.data[i0] + a * spectrumData.data[i1];
+}
+
+void Renderer::buildWavelengthSamplingTable(
+    const SpectrumData& yBar, // 等色関数
+    const SpectrumData* illuminant,
+    float lambdaMin,
+    float lambdaMax,
+    int numBins,
+    std::vector<float>& outPdf,
+    std::vector<float>& outCdf
+)
+{
+    outPdf.assign(numBins, 0.0f);
+    outCdf.assign(numBins + 1, 0.0f);
+
+    const float dLambda = (lambdaMax - lambdaMin) / float(numBins);
+
+    float sum = 0.0f;
+    for(int i = 0; i < numBins; ++i){
+        const float l0 = lambdaMin + dLambda * float(i);
+        const float l1 = l0 + dLambda;
+
+        const float y0 = std::max(0.0f, sampleSpectrumLinearCPU(yBar, l0));
+        const float y1 = std::max(0.0f, sampleSpectrumLinearCPU(yBar, l1));
+
+        float e0 = 1.0f;
+        float e1 = 1.0f;
+        if(illuminant){
+            e0 = std::max(0.0f, sampleSpectrumLinearCPU(*illuminant, l0));
+            e1 = std::max(0.0f, sampleSpectrumLinearCPU(*illuminant, l1));
+        }
+
+        const float f0 = y0 * e0;
+        const float f1 = y1 * e1;
+        const float w = 0.5f * (f0 + f1) * dLambda;
+
+        outPdf[i] = w;
+        sum += w;
+    }
+
+    if(sum <= 0.0f){
+        // fallback
+        for(int i = 0; i < numBins; ++i){
+            outPdf[i] = 1.0f / float(numBins);
+            outCdf[i + 1] = float(i + 1) / float(numBins);
+        }
+        outCdf[0] = 0.0f;
+        outCdf[numBins] = 1.0f;
+        return;
+    }
+
+    outCdf[0] = 0.0f;
+    for(int i = 0; i < numBins; ++i){
+        outPdf[i] /= sum;
+        outCdf[i + 1] = outCdf[i] + outPdf[i];
+    }
+
+    outCdf[numBins] = 1.0f;
+}
+
+bool Renderer::loadAtmosphere()
+{
+    std::filesystem::path exePath;
+    char pathBuffer[MAX_PATH] = {};
+#if defined(_WIN32)
+    if(GetModuleFileNameA(NULL, pathBuffer, MAX_PATH) == 0){
+        std::cerr << "ERROR: GetModuleFileNameA failed" << std::endl;
+    }
+    exePath = std::filesystem::path(pathBuffer);
+#else
+    ssize_t count = readlink("/proc/self/exe", exePath, PATH_MAX);
+    if(count == -1) {
+        std::cerr << "ERROR: readlink() failed" << std::endl;
+    }
+#endif
+    std::filesystem::path dataDir = exePath.parent_path().parent_path().parent_path().parent_path() / "atmosphericLUT";
+    std::string error;
+    m_atmosphereLUTs.setDirectory(dataDir);
+    if(!m_atmosphereLUTs.load(error)) {
+        std::cerr << "Failed to load atmosphere LUTs: " << error << std::endl;
+        return false;
+    }
+
+    const AtmosphereDeviceData& atmo = m_atmosphereLUTs.deviceData();
+
+    // launchParams に登録していく
+    m_launchParams.atmo.sunTransmittanceTex = atmo.sunTransmittanceTex;
+    m_launchParams.atmo.directIrradianceTex = atmo.directIrradianceTex;
+
+    m_launchParams.atmo.skyRayleighTexHandles   = atmo.skyRayleighTexHandles;
+    m_launchParams.atmo.skyMieTexHandles        = atmo.skyMieTexHandles;
+    m_launchParams.atmo.skyMultipleTexHandles   = atmo.skyMultipleTexHandles;
+    
+    m_launchParams.atmo.lambdaCount   = atmo.lambdaCount;
+
+    m_launchParams.atmo.bottomRadius_m      = atmo.bottomRadius_m;
+    m_launchParams.atmo.topRadius_m         = atmo.topRadius_m;
+    m_launchParams.atmo.observerAltitude_m  = atmo.observerAltitude_m;
+    m_launchParams.atmo.muSMin              = atmo.muSMin;
+
+    m_launchParams.atmo.skyNu   = atmo.skyNu;
+    m_launchParams.atmo.skyMu   = atmo.skyMu;
+    m_launchParams.atmo.skyMuS  = atmo.skyMuS;
+
+    m_launchParams.atmo.irradianceR     = atmo.irradianceR;
+    m_launchParams.atmo.irradianceMuS   = atmo.irradianceMuS;
+
+    return true;
 }

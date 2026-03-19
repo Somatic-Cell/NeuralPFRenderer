@@ -5,9 +5,10 @@
 #include "../utils/my_math.hpp"
 #include <cuda_runtime.h>
 
-// #define PHASE_FUNCTION_TABULATED // 0: HG, 1: Tabulated, 2: Neural
+
+#define PHASE_FUNCTION_TABULATED // 0: HG, 1: Tabulated, 2: Neural
 // #define PHASE_FUNCTION_HG // 0: HG, 1: Tabulated, 2: Neural
-#define PHASE_FUNCTION_NEURAL // 0: HG, 1: Tabulated, 2: Neural
+// #define PHASE_FUNCTION_NEURAL // 0: HG, 1: Tabulated, 2: Neural
 
 
 static constexpr uint32_t MASK_VOLUME  = 0x01u;
@@ -53,6 +54,7 @@ enum {
 enum {
     LIGHT_TYPE_ENV_SPHERE=0, 
     LIGHT_TYPE_TRIANGLE, 
+    LIGHT_TYPE_SKY, 
     NUM_LIGHT_TYPE
 };
 
@@ -138,6 +140,44 @@ struct TriangleLightData {
     TextureSlot emissiveTexture;
 };
 
+struct SpectralParams {
+    alignas(8) cudaTextureObject_t xyzFunc[3];
+    alignas(8) cudaTextureObject_t upSampleFunc[3];
+    alignas(8) cudaTextureObject_t D65;
+    float wavelengthMin     {390.0f};
+    float wavelengthMax     {830.0f};
+
+    const float* wavelengthPdf;
+    const float* wavelengthCdf;
+    int         wavelengthBinCount;
+    float       wavelengthBinWidth;
+};
+
+struct AtmosphereDeviceData {
+    cudaTextureObject_t sunTransmittanceTex = 0;
+    cudaTextureObject_t directIrradianceTex = 0;
+
+    CUdeviceptr skyRayleighTexHandles = 0;
+    CUdeviceptr skyMieTexHandles = 0;
+    CUdeviceptr skyMultipleTexHandles = 0;
+
+    CUdeviceptr wavelengthsNm = 0;
+
+    uint32_t lambdaCount = 0;
+
+    float bottomRadius_m = 0.0f;
+    float topRadius_m = 0.0f;
+    float observerAltitude_m = 0.0f;
+    float muSMin = -0.2f;
+
+    uint32_t skyNu = 0;
+    uint32_t skyMu = 0;
+    uint32_t skyMuS = 0;
+
+    uint32_t irradianceR = 0;
+    uint32_t irradianceMuS = 0;
+};
+
 struct alignas(16) LaunchParams {
     struct {
         // レンダリング結果を出力するバッファ
@@ -148,7 +188,7 @@ struct alignas(16) LaunchParams {
         mymath::matrix3x4* objectMatrixBuffer;
         mymath::matrix3x3* normalMatrixBuffer;
 
-        int2    size            {make_int2(1280, 720)};
+        int2    size            {make_int2(720, 1280)};
         int     accumID         {0};
         int     numPixelSamples {1};
         int     maxBounce       {2048};
@@ -177,7 +217,7 @@ struct alignas(16) LaunchParams {
         LightDefinition*    lightDefinition;
         TriangleLightData*  triangleLightData;
         int numLights                   {0};
-        float lightIntensityFactor      {10.0f};
+        float lightIntensityFactor      {1.0f};
     } light;
 
     struct {
@@ -198,13 +238,7 @@ struct alignas(16) LaunchParams {
     cudaTextureObject_t envMap;
 
     // spectral rendering
-    struct {
-        alignas(8) cudaTextureObject_t xyzFunc[3];
-        alignas(8) cudaTextureObject_t upSampleFunc[3];
-        alignas(8) cudaTextureObject_t D65;
-        float wavelengthMin     {390.0f};
-        float wavelengthMax     {830.0f};
-    } spectral;
+    SpectralParams spectral;
 
     TriangleMeshGeomData* meshes;
     int numMeshes       {0};
@@ -248,6 +282,13 @@ struct alignas(16) LaunchParams {
         alignas(16) uint16_t N[NSF_MAX_TRANSFORMS][NSF_LAYERS_PER_TRANSFORM];
         alignas(16) uint16_t K[NSF_MAX_TRANSFORMS][NSF_LAYERS_PER_TRANSFORM];
     } nsf;
+
+    AtmosphereDeviceData atmo;
+
+    struct {
+        float sunZenithRad;        // +Y からの天頂角 [0, pi]
+        float sunAzimuthRad;       // 水平面での方位角 [0, 2pi)
+    } sunParams;
 };
 
 #endif // LAUNCH_PARAMS_H_

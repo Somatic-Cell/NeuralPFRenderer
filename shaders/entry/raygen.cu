@@ -140,15 +140,27 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
         // prd.pdf.light = 1.0f;
 
         // スペクトルの決定
-        const float wavelengthTexSamplePoint = prd.random();
-        prd.waveLengthNormalized = wavelengthTexSamplePoint; // wavelength (0-1)
+        const SampledWavelength sampledWavelength = sampleWavelengthFromCdf(optixLaunchParams.spectral, prd.random());
+        // const float wavelengthTexSamplePoint = prd.random();
+        // prd.waveLengthNormalized = wavelengthTexSamplePoint; // wavelength (0-1)
         const float wavelengthMin = optixLaunchParams.spectral.wavelengthMin;
         const float wavelengthMax = optixLaunchParams.spectral.wavelengthMax;
-        prd.waveLength = wavelengthMin + (wavelengthMax - wavelengthMin) * wavelengthTexSamplePoint;
+        // prd.waveLength = wavelengthMin + (wavelengthMax - wavelengthMin) * wavelengthTexSamplePoint;
+        prd.waveLength = sampledWavelength.lambda;
+        prd.waveLengthNormalized = (sampledWavelength.lambda - wavelengthMin) 
+            / (wavelengthMax - wavelengthMin); // wavelength (0-1)
 
         // For HWSS
-        prd.beta = make_float4(1.0f);
-        prd.logPOrefix = make_float4(0.0f);
+        prd.beta = make_float4(1.0f / fmaxf(sampledWavelength.pdf, 1.0e-20f));
+
+        constexpr int C = 4;
+        const float invC = 1.0f / (float)C;
+        for(int k = 0; k < C; ++k)
+        {
+            const float u_k = wrap01(prd.waveLengthNormalized + float(k) * invC);
+            const float p_k = evalWavelengthPdf(optixLaunchParams.spectral, u_k);
+            (&prd.logPOrefix.x)[k] = logf(fmaxf(p_k, 1.0e-20f));
+        }
 
         // スクリーン空間上のサンプル点をサブピクセル精度でサンプリング
         const float2 screen = make_float2(
@@ -188,18 +200,18 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
 
         // Spectral -> XYZ
 
-        const float weightLambda = (wavelengthMax - wavelengthMin) / 4.0f;
+        const float weightLambda = (wavelengthMax - wavelengthMin) / float(C);
         
         float x = 0.0f, y = 0.0f, z = 0.0f;
 
-        for(int k = 0; k < 4; ++k){
-            const float u = wrap01(prd.waveLengthNormalized + float(k) / 4.0f);
+        for(int k = 0; k < C; ++k){
+            const float u = wrap01(prd.waveLengthNormalized + float(k) / float(C));
 
             const float xFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[0], u, 0.5f);
             const float yFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[1], u, 0.5f);
             const float zFunc = tex2D<float>(optixLaunchParams.spectral.xyzFunc[2], u, 0.5f);
 
-            const float Lk = (&prd.contribution.x)[k];
+            const float Lk = (&prd.contribution.x)[k] * 0.001f;
             x += xFunc * Lk * weightLambda;
             y += yFunc * Lk * weightLambda;
             z += zFunc * Lk * weightLambda;
@@ -217,7 +229,7 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
         // pixelAlbedo = pixelAlbedo + (prd.primaryAlbedo - pixelAlbedo) / (sampleID + 1.0f);
 
     }
-    pixelColor = clamp(pixelColor, -1000.0f, 1000.0f);
+    pixelColor = clamp(pixelColor, -1000.0f, 10000.0f);
     if(!isfinite(pixelColor.x) || !isfinite(pixelColor.y) || !isfinite(pixelColor.z)){
         pixelColor = make_float3(0.0f);
     }

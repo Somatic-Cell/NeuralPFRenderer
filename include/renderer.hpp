@@ -16,6 +16,8 @@
 #include "nsf_hyper_coopvec_pack.hpp"
 #include "nsf_hyper_checkpoint.hpp"
 
+#include "atmosphere_lut.h"
+
 
 
 enum class OptixModuleIdentifier{
@@ -111,6 +113,11 @@ public:
     float getWavelengthMin() const;
     float getWavelengthMax() const;
 
+    // 空の描画用
+    void setZenith(float zenithRad);
+    float getZenith() const;
+    void setAzimuth(float azimuthRad);
+    float getAzimuth() const;
     
 
 protected:
@@ -142,6 +149,19 @@ protected:
 
     // Mie texture
     void loadMieData();
+
+    float sampleSpectrumLinearCPU(const SpectrumData& spectrumData, float lambda);
+    void buildWavelengthSamplingTable(
+        const SpectrumData& yBar, // 等色関数
+        const SpectrumData* illuminant,
+        float lambdaMin,
+        float lambdaMax,
+        int numBins,
+        std::vector<float>& outPdf,
+        std::vector<float>& outCdf
+    );
+
+    bool loadAtmosphere();
 
 
     CUcontext           m_cudaContext;
@@ -251,6 +271,15 @@ protected:
     float                           m_wavelengthMin;
     float                           m_wavelengthMax;
 
+    std::vector<float>              m_wavelengthPdfHost;
+    std::vector<float>              m_wavelengthCdfHost;
+
+    CUDABuffer                      m_wavelengthPdfBuffer;
+    CUDABuffer                      m_wavelengthCdfBuffer;
+
+    int                             m_wavelengthBinCount {0};
+    float                           m_wavelengthBinWidth {0.f};
+
     // XYZ 等色関数
     std::vector<cudaArray_t>            m_xyzFuncArrays;    // 関数の実体が入ったデータのベクトル
     std::vector<cudaTextureObject_t>    m_xyzFuncObjects;   // 関数にアクセスするためのハンドル
@@ -293,6 +322,9 @@ protected:
     void buildNsfPackedWeightsCoopVec(
         uint32_t inputPad = 16
     );
+
+    // Precomputed Atmospheric Rendering
+    AtmosphericLUTs m_atmosphereLUTs;
 
 };
 

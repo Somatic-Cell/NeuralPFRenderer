@@ -35,18 +35,6 @@ float evalPhaseFunctionHG
     return (1.0f - gg) / (4.0f * M_PI * fmaxf(denom32, 1e-20f));
 }
 
-static __forceinline__ __device__
-void makeONB(const float3& w, float3& t, float3& b)
-{
-    if(fabsf(w.z) < 0.999f){
-        const float a = 1.0f / sqrtf(fmaxf(1e-20f, 1.0f - w.z * w.z));
-        t = make_float3(-w.y * a, w.x * a, 0.0f);
-    } else {
-        const float a = 1.0f / sqrtf(fmaxf(1e-20f, 1.0f - w.x * w.x));
-        t = make_float3(0.0f, -w.z * a, w.y * a);
-    }
-    b = cross(w, t);
-}
 
 struct PhaseSample
 {

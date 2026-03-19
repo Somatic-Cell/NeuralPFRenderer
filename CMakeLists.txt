@@ -216,6 +216,7 @@ set(
     ${PROJECT_SOURCE_DIR}/shaders/device/trace_volume.cuh
     ${PROJECT_SOURCE_DIR}/shaders/device/phase_function.cuh
     ${PROJECT_SOURCE_DIR}/shaders/device/neural_phase_function.cuh
+    ${PROJECT_SOURCE_DIR}/shaders/device/atmosphere_sampling_device.cuh
     ${PROJECT_SOURCE_DIR}/shaders/config.cuh
 )
 
@@ -231,8 +232,7 @@ set(CUDA_NVCC_OPTIONS
     "--use_fast_math"                           # 精度を犠牲に高速な近似計算を実行
     "--relocatable-device-code=false"
     "-I${OPTIX_INCLUDE_DIR}"
-    "-Xptxas=-v"
-    "-Xptxas=--warn-spills"
+    "-Xptxas=-v, --warn-spills"
 )
 
 
@@ -267,8 +267,7 @@ if(USE_OPTIX_IR)
         "--use_fast_math"                           # 精度を犠牲に高速な近似計算を実行
         "--relocatable-device-code=true"
         "-I${OPTIX_INCLUDE_DIR}"
-        "-Xptxas=-v"
-        "-Xptxas=--warn-spills"
+        "-Xptxas=-v, --warn-spills"
     )
 
     set(NANOVDB_INCLUDE_DIR "${EXT_DIR}/openvdb/nanovdb")
@@ -316,13 +315,15 @@ add_executable(${TARGET_NAME}
     "${SOURCE_DIR}/texture.cpp"
     "${SOURCE_DIR}/model.cpp"
     "${SOURCE_DIR}/application.cpp"
+    "${SOURCE_DIR}/atmosphere_lut.cpp"
     "${INCLUDE_DIR}/vdb_loader.hpp"
     "${INCLUDE_DIR}/optix8.hpp"
     "${INCLUDE_DIR}/renderer.hpp"
-    "${INCLUDE_DIR}/texture.hpp"
     "${INCLUDE_DIR}/model.h"
     "${INCLUDE_DIR}/launch_params.h"
     "${INCLUDE_DIR}/cuda_buffer.h"
+    "${INCLUDE_DIR}/cuda_texture.h"
+    "${INCLUDE_DIR}/atmosphere_lut.h"
     "${INCLUDE_DIR}/ptx_data_reader.hpp"
     "${INCLUDE_DIR}/application.hpp"
     "${INCLUDE_DIR}/mie_tables_txt_loader.h"

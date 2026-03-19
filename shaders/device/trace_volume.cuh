@@ -152,7 +152,7 @@ struct IndexRay
 };
 
 #ifndef VDB_TRACKING_HALO_MAJORANT
-#define VDB_TRACKING_HALO_MAJORANT 0
+#define VDB_TRACKING_HALO_MAJORANT 1
 #endif
 
 template<typename AccT>
@@ -254,7 +254,8 @@ LocalSegment getLocalSegment(
     float t,            // 現在の距離
     float tExitWorld,   // 外までの距離
     float densityScale,
-    float sigmaTScale
+    float sigmaTScale,
+    float globalMajorant
 )
 {
     LocalSegment seg;
@@ -276,7 +277,7 @@ LocalSegment getLocalSegment(
 
     // const int dim = info.mDim();          // ノードのサイズ (おそらく 8 の倍数)
     // printf("ndim : %d\n", dim);
-    const float vmax = info.maximum;   // ノード内の最大密度
+    const float vmax = info.maximum;   // この node / tile の最大密度
 
     // using TreeType = nanovdb::FloatGrid::TreeType;
     // constexpr int LEAF_DIM = TreeType::LeafNodeType::DIM;
@@ -292,13 +293,13 @@ LocalSegment getLocalSegment(
     const nanovdb::Coord bbMaxC = info.bbox.max();
     
     const nanovdb::Vec3f bbMin(
-        (float)bbMinC[0] - 0.5f,
-        (float)bbMinC[1] - 0.5f, 
-        (float)bbMinC[2] - 0.5f);
+        (float)bbMinC[0] - 1.0f,
+        (float)bbMinC[1] - 1.0f, 
+        (float)bbMinC[2] - 1.0f);
     const nanovdb::Vec3f bbMax(
-        (float)bbMaxC[0] + 0.5f, 
-        (float)bbMaxC[1] + 0.5f, 
-        (float)bbMaxC[2] + 0.5f);
+        (float)bbMaxC[0] + 1.0f, 
+        (float)bbMaxC[1] + 1.0f, 
+        (float)bbMaxC[2] + 1.0f);
 
     float tNear, tFar;
     if(intersectAABBVec3(rayOriginIndex, rayDirectionIndex, bbMin, bbMax, t, tExitWorld, tNear, tFar)){
@@ -308,7 +309,10 @@ LocalSegment getLocalSegment(
         seg.tEnd = tExitWorld;
     }
 
-    seg.majorant = fmaxf(vmax * densityScale * sigmaTScale, 0.0f);
+    // seg.majorant = fmaxf(vmax * densityScale * sigmaTScale, 0.0f);
+    // local majorant にせず，empty span だけ飛ばし，active span 内では global majorant を使う
+    const float localUpper = fmaxf(vmax * densityScale * sigmaTScale, 0.0f);
+    seg.majorant = (localUpper > 0.0f) ? globalMajorant : 0.0f;
     return seg;
 }
 
@@ -345,6 +349,8 @@ bool deltaTrack_localMajorant(
 
     if (!optixLaunchParams.vdbs) return false;
 
+    
+
     const nanovdb::Vec3f rayOriginWorld(rayOriginObject.x, rayOriginObject.y, rayOriginObject.z);
     const nanovdb::Vec3f rayDirectionWorld(rayDirectionObject.x, rayDirectionObject.y, rayDirectionObject.z);
     
@@ -362,6 +368,9 @@ bool deltaTrack_localMajorant(
     seg.tEnd = tExit;
     seg.majorant = grid->tree().root().maximum() * densityScale * sigmaTScale;
 
+    // RNG state をローカルへ退避（レジスタに乗りやすい）
+    Random random = prd.random;
+
     for(int i = 0; i < 4096; ++i){
         // はみ出た場合
         if(t >= tExit) return false;
@@ -376,11 +385,14 @@ bool deltaTrack_localMajorant(
         //     continue;
         // }
         
-        const float tCand = t + sampleFreeFlight(prd.random(), seg.majorant);
+        const float tCand = t + sampleFreeFlight(random(), seg.majorant);
         // セルをはみ出すくらい大きな工程をサンプリングしたら，境界で止める
         if(tCand >= seg.tEnd){
             t = seg.tEnd;
-            if(t >= tExit) return false;
+            if(t >= tExit) {
+                prd.random = random;
+                return false;
+            }
             // seg = getLocalSegment(
             //     grid, acc, rayOriginWorld, rayDirectionWorld, rayOriginIndex, rayDirectionIndex,
             //     t, tExit, densityScale, sigmaTScale
@@ -400,12 +412,13 @@ bool deltaTrack_localMajorant(
         float ratio = sigmaT / seg.majorant;
         ratio = fminf(fmaxf(ratio, 0.0f), 1.0f);
 
-        if(prd.random() < ratio){
+        if(random() < ratio){
             outT = t;
+            prd.random = random;
             return true;
         }
     }
-
+    prd.random = random;
     return false;
 
 }
@@ -448,6 +461,8 @@ float ratioTrack_localMajorant(
     //     t, tExit, densityScale, sigmaTScale
     // );
 
+    Random random = prd.random;
+
     for(int i = 0; i < 4096; ++i){
         // はみ出た場合はレイマーチング修了
         if(t >= tExit) break;
@@ -464,7 +479,7 @@ float ratioTrack_localMajorant(
         // }
         
         // 自由行程サンプリング
-        const float tCand = t + sampleFreeFlight(prd.random(), seg.majorant);
+        const float tCand = t + sampleFreeFlight(random(), seg.majorant);
 
         // セルをはみ出すくらい大きな工程をサンプリングしたら，境界で止める
         if(tCand >= seg.tEnd){
@@ -492,9 +507,13 @@ float ratioTrack_localMajorant(
 
         transmittance *= ratio;
 
-        if(transmittance < 1e-6f) return 0.0f; // ほぼ透過しない場合は打ち切る
+        if(transmittance < 1e-6f) {
+            prd.random = random;
+            return 0.0f;
+        }
+             // ほぼ透過しない場合は打ち切る
     }
-
+    prd.random = random;
     return transmittance;
 
 }

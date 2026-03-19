@@ -51,7 +51,7 @@ public:
         scene.camera.fov,
         scene.camera.sensitivity,
         scene.camera.pintDist,
-        length(models[0]->bounds.getSpan())
+        models.empty() ? 1.0f : length(models[0]->bounds.getSpan())
     ), m_renderer(models, scene)
     {
         Camera camera;
@@ -237,6 +237,22 @@ public:
             ImGui::End();
         }
 
+        {
+            ImGui::Begin("Sky params");
+            ImGui::Text("Sun direction:");
+            float zenithRad = m_renderer.getZenith() / M_PI * 180.0f;  
+            float azimuthRad = m_renderer.getAzimuth() / M_PI * 180.0f;  
+            if(ImGui::SliderFloat("Zenith angle", &zenithRad, 0.0f, 100.0f)){
+                m_renderer.setZenith(zenithRad / 180.0f * M_PI);
+                m_cameraFrame.setIsTransformDirty(true);
+            }
+            if(ImGui::SliderFloat("Azimuth angle", &azimuthRad, 0.f, 360.0f)){
+                m_renderer.setAzimuth(azimuthRad / 180.0f * M_PI);
+                m_cameraFrame.setIsTransformDirty(true);
+            }
+            ImGui::End();
+        }
+
         if(m_scene.integrator.applySpectralRendering){
             ImGui::Begin("For Spectral Rendering");
             ImGui::Text("Spectrum Data:");
@@ -283,7 +299,7 @@ public:
     void copyBufferToSurface();
 
 protected:
-    int2                    m_fbSize            {make_int2(720, 1280)};
+    int2                    m_fbSize            {make_int2(1280, 720)};
     GLuint                  m_fbTexture         {0};        // レンダリング結果を表示する OpenGL テクスチャ 
     cudaGraphicsResource_t  m_cudaTexResource   {nullptr};
     Renderer                m_renderer;

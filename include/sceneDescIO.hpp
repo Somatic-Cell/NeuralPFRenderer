@@ -70,7 +70,8 @@ namespace sceneIO {
     struct Spectrum {
         std::string xyzFuncFile = "xyzbar_from_lms.csv";
         std::string upSampleBasisFile = "basis_rgb.csv";
-        std::string D65File = "CIE_std_illum_D65.csv";
+        // std::string D65File = "CIE_std_illum_D65.csv";
+        std::string D65File = "PVL_Spectrum.csv";
     };
 
     struct Scene {

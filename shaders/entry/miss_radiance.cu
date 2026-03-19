@@ -4,8 +4,10 @@
 
 #include "../params/per_ray_data.cuh"
 #include "../device/shader_common.cuh"
+#include "../device/atmosphere_sampling_device.cuh"
 #include "../device/random_number_generator.cuh"
 #include "../../include/launch_params.h"
+#include "../../include/atmosphere_lut.h"
 #include <stdio.h>
 
 // radiance ray が交差しない = 環境マップにあたる
@@ -124,4 +126,52 @@ extern "C" __global__ void __miss__radiance_noEnvMap_spectral()
     //     prd.primaryAlbedo = make_float3(0.0f);
     //     prd.primaryNormal = - prd.wi; 
     // }
+}
+
+
+extern "C" __global__ void __miss__radiance_sky_spectral()
+{
+    PRDSpectral &prd = *getPRD<PRDSpectral>();
+    const AtmosphereDeviceData& atmo = optixLaunchParams.atmo;
+
+    const float3 viewDir = prd.wi;
+    const float3 sunDir = atmo::sunDirFromAngles(
+        optixLaunchParams.sunParams.sunZenithRad,
+        optixLaunchParams.sunParams.sunAzimuthRad
+    );
+
+    const float spectralMISWeight = hwssSpectralWeight(prd.logPOrefix);
+    const atmo::SkySamplingConfig config;
+    const float uHero = prd.waveLengthNormalized;
+    constexpr int C = 4;
+    const float invC = 1.0f / (float)C;
+    float weight = 1.0f;
+    for(int k = 0; k < C; ++k)
+    {
+        const float u_k = wrap01(uHero + float(k) * invC);
+        const float L = atmo::evalSkyMissSpectralFixedObserver(
+           optixLaunchParams.atmo,
+           config,
+           optixLaunchParams.spectral.D65,
+           u_k,
+           viewDir,
+           sunDir
+        );
+        if(prd.bounce > 0){
+        const float pdfLight = atmo::evalSkyEmitterMixturePdf(
+            config,
+            viewDir,
+            sunDir
+        );
+
+        weight = balanceHeuristicWeight(
+            1, fmaxf(prd.pdf.bxdf,  1.0e-7f),
+            1, fmaxf(pdfLight,      1.0e-7f));
+        }
+
+        float beta_k = (&prd.beta.x)[k];
+        (&prd.contribution.x)[k] += L * weight * beta_k * spectralMISWeight;
+    }
+    
+    prd.continueTrace = false;
 }

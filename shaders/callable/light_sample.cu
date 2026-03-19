@@ -5,6 +5,7 @@
 #include "../params/per_ray_data.cuh"
 #include "../device/shader_common.cuh"
 #include "../device/random_number_generator.cuh"
+#include "../device/atmosphere_sampling_device.cuh"
 #include "../../include/launch_params.h"
 
 extern "C" __device__ LightSample_RGB __direct_callable__light_env_sphere_constant_rgb(LightDefinition light, PRDRGB* prd)
@@ -276,8 +277,44 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_triangle_spe
         lightSample.distance    = distance;
         lightSample.position    = sampledPosition;
         lightSample.direction   = lightDirection;
-        lightSample.emissionRGB = emissionRGB; // MEMO: pdfChoseLight とするのが分かりやすいい？
+        lightSample.emissionRGB = emissionRGB; // MEMO: pdfChoseLight とするのが分かりやすい？
     }
 
     return lightSample;
+}
+
+extern "C" __device__
+LightSample_Spectral __direct_callable__light_sky_spectral(LightDefinition light, PRDSpectral* prd)
+{
+    LightSample_Spectral ls{};
+
+    const float lambda01 = prd->waveLengthNormalized;
+    const float3 sunDir  = atmo::sunDirFromAngles(
+        optixLaunchParams.sunParams.sunZenithRad,
+        optixLaunchParams.sunParams.sunAzimuthRad);
+
+    atmo::SkySamplingConfig config;
+    const atmo::SkyLightSample s = atmo::sampleSkyEmitterMixture(
+        config,
+        sunDir,
+        prd->random(),
+        prd->random(),
+        prd->random());
+
+    ls.direction = s.dir;
+    ls.distance  = 1.0e7f;
+
+    // 既存流儀に合わせて full pdf にする
+    const float pSelect = 1.0f / float(optixLaunchParams.light.numLights);
+    ls.pdf = s.pdf * pSelect;
+
+    ls.emissionRGB.y = atmo::evalSkyMissSpectralFixedObserver(
+        optixLaunchParams.atmo,
+        config,
+        optixLaunchParams.spectral.D65,
+        lambda01,
+        s.dir,
+        sunDir);
+
+    return ls;
 }

@@ -38,7 +38,7 @@ MyGLFWWindow::MyGLFWWindow(const std::string & title)
         glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 
 #endif
-    m_handle = glfwCreateWindow(720, 1280, title.c_str(), NULL, NULL);
+    m_handle = glfwCreateWindow(1280, 720, title.c_str(), NULL, NULL);
     if(!m_handle){
         glfwTerminate();
         exit(EXIT_FAILURE);
@@ -152,8 +152,8 @@ void GLFWCameraWindow::run()
         save("smoke");
         const auto t1 = clock::now();
 
-        const auto sec = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0).count();
-        std::cout << "render() wall time: " << sec << " s (" << (sec / 60.0) << " min)\n";
+        // const auto sec = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0).count();
+        // std::cout << "render() wall time: " << sec << " s (" << (sec / 60.0) << " min)\n";
 
         glfwPollEvents();
         if(glfwGetWindowAttrib(m_handle, GLFW_ICONIFIED) != 0){
@@ -171,7 +171,7 @@ void GLFWCameraWindow::run()
             
         draw();        
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        glfwTerminate();
+        // glfwTerminate();
         glfwSwapBuffers(m_handle);
     }
 }
