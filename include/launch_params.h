@@ -6,9 +6,9 @@
 #include <cuda_runtime.h>
 
 
-#define PHASE_FUNCTION_TABULATED // 0: HG, 1: Tabulated, 2: Neural
+// #define PHASE_FUNCTION_TABULATED // 0: HG, 1: Tabulated, 2: Neural
 // #define PHASE_FUNCTION_HG // 0: HG, 1: Tabulated, 2: Neural
-// #define PHASE_FUNCTION_NEURAL // 0: HG, 1: Tabulated, 2: Neural
+#define PHASE_FUNCTION_NEURAL // 0: HG, 1: Tabulated, 2: Neural
 
 
 static constexpr uint32_t MASK_VOLUME  = 0x01u;
@@ -107,8 +107,13 @@ struct TriangleMeshGeomData {
 
 struct VDBGeomData {
     CUdeviceptr nanoGrid;
+    CUdeviceptr macroMajorant;
     float densityScale;
     float emissionScale;
+    float macroMaxDensity;
+    int macroCellSizeVoxels;
+    int4 macroBaseCoord;
+    int4 macroDims;
 };
 
 struct MaterialData {

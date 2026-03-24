@@ -437,7 +437,7 @@ extern "C" __global__ void __closesthit__radiance_spectral()
             
 
             // 方向の MIS
-            float directionalMISWeight = 1.0f;
+            float misWeight = 1.0f;
             if(prd.bounce != 0)
             {
                 const float r = rayLength;
@@ -446,26 +446,30 @@ extern "C" __global__ void __closesthit__radiance_spectral()
                 float pdfLight =  pSelect * pArea * (r * r) / cosTheta;
                 pdfLight = fmaxf(pdfLight, 1e-7f);
 
-                const float pdfBXDFHero = fmaxf(prd.pdf.bxdf, 1e-7f);
-                directionalMISWeight = balanceHeuristicWeight(1, pdfBXDFHero, 1, pdfLight);
+                const float pdfBXDF = fmaxf(prd.pdf.bxdf, 1e-7f);
+                misWeight = balanceHeuristicWeight(1, pdfBXDF, 1, pdfLight);
             }
             
             // 波長方向の MIS
-            const float spectralMISWeight = hwssSpectralWeight(prd.logPOrefix);
-            constexpr int C = 4;
-            const float invC = 1.0f/ float(C);
-            const float uHero = prd.waveLengthNormalized;
+            // const float spectralMISWeight = hwssSpectralWeight(prd.logPOrefix);
+            // constexpr int C = 4;
+            // const float invC = 1.0f/ float(C);
+            // const float uHero = prd.waveLengthNormalized;
+            const float uWavelength = prd.waveLengthNormalized;
 
-            for(int k = 0; k < C; ++k){
-                float emission = emissionRGB.y;
-                const float u = wrap01(uHero + float(k) * invC);
-                const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
-                emission *= (optixLaunchParams.light.lightIntensityFactor  * D65);
+            float emission = emissionRGB.y;
+            const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
+            prd.contribution = emission * misWeight;
 
-                // throughput
-                float beta_k = (&prd.beta.x)[k];
-                (&prd.contribution.x)[k] += emission * beta_k * directionalMISWeight * spectralMISWeight;
-            }
+            // for(int k = 0; k < C; ++k){
+            //     const float u = wrap01(uHero + float(k) * invC);
+            //     const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
+            //     emission *= (optixLaunchParams.light.lightIntensityFactor  * D65);
+
+            //     // throughput
+            //     float beta_k = (&prd.beta.x)[k];
+            //     (&prd.contribution.x)[k] += emission * beta_k * directionalMISWeight * spectralMISWeight;
+            // }
         }
             
         prd.continueTrace = false;
@@ -535,11 +539,12 @@ extern "C" __global__ void __closesthit__radiance_spectral()
 
             if(shadowPrd.visible){
                 // 波長の MIS
-                const float spectralMISWeight = hwssSpectralWeight(prd.logPOrefix);
+                // const float spectralMISWeight = hwssSpectralWeight(prd.logPOrefix);
 
-                constexpr int C = 4;
-                const float invC = 1.0f / (float)C;
-                const float uHero = prd.waveLengthNormalized;
+                // constexpr int C = 4;
+                // const float invC = 1.0f / (float)C;
+                // const float uHero = prd.waveLengthNormalized;
+                const float uNormalized = prd.waveLengthNormalized;
 
 
                 const float pdfLight = fmaxf(lightSample.pdf, 1e-7f);
@@ -547,29 +552,41 @@ extern "C" __global__ void __closesthit__radiance_spectral()
                 // BSDF の計算
                 int callableFunctionOffset = NUM_LENS_TYPE + material->materialType * 2 + 1; // 登録した順番が lens の後で，materialType * 2 + 1 が 対応するマテリアルの eval 関数 
                 
-                // 波長ごとに BSDF を評価
-                for(int k = 0; k < C; ++k){
-                    const float u = wrap01(uHero + float(k) * invC);
+                float bxdfValue = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, wiLocal, woLocal, matData, &prd);
+                const float bxdfPdf = fmaxf(prd.pdf.bxdf, 1e-7f);
 
-                    // 波長を一時的に差し替え
-                    prd.waveLengthNormalized = u;
-                    float bxdfValue = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, wiLocal, woLocal, matData, &prd);
-                    const float bxdfPdf = fmaxf(prd.pdf.bxdf, 1e-7f);
-                    // 戻す
-                    prd.waveLengthNormalized = uHero;
+                // emission の取得
+                float emission = lightSample.emissionRGB.y;
+                const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
+                emission *= (optixLaunchParams.light.lightIntensityFactor  * D65);
 
-                    // emission の取得
-                    float emission = lightSample.emissionRGB.y;
-                    const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
-                    emission *= (optixLaunchParams.light.lightIntensityFactor  * D65);
+                const float misWeight = balanceHeuristicWeight(1, pdfLight, 1, bxdfPdf);
+                prd.contribution += emission * bxdfValue * wiLocal.y * misWeight / pdfLight / prd.pdf.spectral;
+                
+                
+                // // 波長ごとに BSDF を評価
+                // for(int k = 0; k < C; ++k){
+                //     const float u = wrap01(uHero + float(k) * invC);
 
-                    const float directionalMISWeight = balanceHeuristicWeight(1, pdfLight, 1, bxdfPdf);
+                //     // 波長を一時的に差し替え
+                //     prd.waveLengthNormalized = u;
+                //     float bxdfValue = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, wiLocal, woLocal, matData, &prd);
+                //     const float bxdfPdf = fmaxf(prd.pdf.bxdf, 1e-7f);
+                //     // 戻す
+                //     prd.waveLengthNormalized = uHero;
 
-                    // throughput
-                    float beta_k = (&prd.beta.x)[k];
-                    (&prd.contribution.x)[k] += emission * beta_k * bxdfValue * wiLocal.y * directionalMISWeight * spectralMISWeight / pdfLight;
+                //     // emission の取得
+                //     float emission = lightSample.emissionRGB.y;
+                //     const float D65 = tex2D<float>(optixLaunchParams.spectral.D65, u, 0.5f);
+                //     emission *= (optixLaunchParams.light.lightIntensityFactor  * D65);
 
-                }
+                //     const float directionalMISWeight = balanceHeuristicWeight(1, pdfLight, 1, bxdfPdf);
+
+                //     // throughput
+                //     float beta_k = (&prd.beta.x)[k];
+                //     (&prd.contribution.x)[k] += emission * beta_k * bxdfValue * wiLocal.y * directionalMISWeight * spectralMISWeight / pdfLight;
+
+                // }
                 
             }
         }
@@ -579,9 +596,10 @@ extern "C" __global__ void __closesthit__radiance_spectral()
     
     // 次の方向の決定
     // BSDF のサンプリング とアルベドの変更
-    constexpr int C = 4;
-    const float invC = 1.0f / (float)C;
-    const float uHero = prd.waveLengthNormalized;
+    // constexpr int C = 4;
+    // const float invC = 1.0f / (float)C;
+    // const float uHero = prd.waveLengthNormalized;
+    const float uNormalized = prd.waveLengthNormalized;
 
     // BSDF のサンプル (Hero のみ 1 回)
 
@@ -601,24 +619,24 @@ extern "C" __global__ void __closesthit__radiance_spectral()
 
 
     // HWSS
-    prd.beta.x *= bxdfValueHero * sampledWiLocal.y / pdfHero;
-    prd.logPOrefix.x += logf(pdfHero);
+    // prd.beta.x *= bxdfValueHero * sampledWiLocal.y / pdfHero;
+    // prd.logPOrefix.x += logf(pdfHero);
     
     // k = 1 -- C-1
-    const float oldU = prd.waveLengthNormalized;
-    const float oldPdf = prd.pdf.bxdf;
+    // const float oldU = prd.waveLengthNormalized;
+    // const float oldPdf = prd.pdf.bxdf;
 
-    for(int k = 1; k < C; ++k){
-        const float u = wrap01(uHero + float(k) * invC);
-        prd.waveLengthNormalized = u;
-        const float fk = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, sampledWiLocal, woLocal, matData, &prd);
-        const float pdfk = fmaxf(prd.pdf.bxdf, 1e-7f);
-        (&prd.beta.x)[k] += fk * sampledWiLocal.y / pdfHero;
-        (&prd.logPOrefix.x)[k] += logf(pdfk);
-    }
+    // for(int k = 1; k < C; ++k){
+    //     const float u = wrap01(uHero + float(k) * invC);
+    //     prd.waveLengthNormalized = u;
+    //     const float fk = optixDirectCall<float, const float3, const float3, const IntersectedData_Spectral& , PRDSpectral*>(callableFunctionOffset, sampledWiLocal, woLocal, matData, &prd);
+    //     const float pdfk = fmaxf(prd.pdf.bxdf, 1e-7f);
+    //     (&prd.beta.x)[k] += fk * sampledWiLocal.y / pdfHero;
+    //     (&prd.logPOrefix.x)[k] += logf(pdfk);
+    // }
 
-    prd.waveLengthNormalized = uHero;
-    prd.pdf.bxdf = oldPdf;
+    // prd.waveLengthNormalized = uHero;
+    // prd.pdf.bxdf = oldPdf;
 
     prd.position += 1e-3f * Ng;
     // prd.albedo *= bxdfValue * sampledWiLocal.y / fmaxf(prd.pdf.bxdf, 1e-7f);

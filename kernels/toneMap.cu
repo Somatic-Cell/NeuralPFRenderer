@@ -9,10 +9,10 @@ __device__ float clamp01(float x) {
 }
 
 inline __device__ float4 d_toneMapLocal(const float4 color, const float white){
-    // float luminance = 0.3f *0 color.x + 0.6f * color.y + 0.1f * color.z;
-    // return color *  (1.f + luminance / powf(white, 2)) / (1.f + luminance);
+    float luminance = 0.2f * color.x + 0.7f * color.y + 0.1f * color.z;
+    return color *  (1.f + luminance / powf(white, 2)) / (1.f + luminance);
     // return color / (make_float4(1.0f) + color);
-    return  color / (make_float4(1.0f) + color) * (make_float4(1.0f) + color / pow(white, 2));
+    // return  color / (make_float4(1.0f) + color) * (make_float4(1.0f) + color / pow(white, 2));
 }
 
 inline __device__ float4 d_gammacorrect(float4 color, const float gamma) {

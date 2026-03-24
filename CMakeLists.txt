@@ -6,6 +6,9 @@
 ### JP: CMake のバージョン
 cmake_minimum_required(VERSION 3.18)
 
+### CUDA
+set(CMAKE_CUDA_ARCHITECTURES 86)
+
 set(PROJECT_NAME "NeuralPFRenderer")
 set(TARGET_NAME ${PROJECT_NAME})
 

@@ -11,7 +11,7 @@
 extern "C" __device__ LightSample_RGB __direct_callable__light_env_sphere_constant_rgb(LightDefinition light, PRDRGB* prd)
 {
     LightSample_RGB lightSample;
-    lightSample.pdf = 1.0f /  (4.0f * M_PI) / float(optixLaunchParams.light.numLights);
+    lightSample.pdf = 1.0f /  (4.0f * (float)M_PI) / float(optixLaunchParams.light.numLights);
     lightSample.distance = 1e7f;
     
     const float3 direction = random_unit_sphere(prd->random(), prd->random()); 
@@ -37,7 +37,7 @@ extern "C" __device__ LightSample_RGB __direct_callable__light_env_sphere_is_rgb
 
     if(totalWeight <= 0.0f){
         // 普通の一様サンプリング
-        lightSample.pdf = 1.0f /  (4.0f * M_PI) / float(optixLaunchParams.light.numLights);
+        lightSample.pdf = 1.0f /  (4.0f * (float)M_PI) / float(optixLaunchParams.light.numLights);
         const float3 direction = random_unit_sphere(prd->random(), prd->random()); 
         lightSample.direction = direction; 
         float u, v;
@@ -149,7 +149,7 @@ extern "C" __device__ LightSample_RGB __direct_callable__light_triangle_rgb(Ligh
 extern "C" __device__ LightSample_Spectral __direct_callable__light_env_sphere_constant_spectral(LightDefinition light, PRDSpectral* prd)
 {
     LightSample_Spectral lightSample;
-    lightSample.pdf = 1.0f /  (4.0f * M_PI) / float(optixLaunchParams.light.numLights);
+    lightSample.pdf = 1.0f /  (4.0f * (float)M_PI) / float(optixLaunchParams.light.numLights);
     lightSample.distance = 1e7f;
     
     const float3 direction = random_unit_sphere(prd->random(), prd->random()); 
@@ -175,7 +175,7 @@ extern "C" __device__ LightSample_Spectral __direct_callable__light_env_sphere_i
 
     if(totalWeight <= 0.0f){
         // 普通の一様サンプリング
-        lightSample.pdf = 1.0f /  (4.0f * M_PI) / float(optixLaunchParams.light.numLights);
+        lightSample.pdf = 1.0f /  (4.0f * (float)M_PI) / float(optixLaunchParams.light.numLights);
         const float3 direction = random_unit_sphere(prd->random(), prd->random()); 
         lightSample.direction = direction; 
         float u, v;

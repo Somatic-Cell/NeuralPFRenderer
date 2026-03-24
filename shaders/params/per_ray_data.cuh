@@ -38,14 +38,14 @@ struct PRDSpectral {
     float  albedo;
     // float3 primaryNormal;
     // float3 primaryAlbedo;
-    float4 contribution;
+    float contribution;
 
     float  waveLength; // nm hero
     float  waveLengthNormalized; // 0-1, テクスチャフェッチ用
     
     struct{
-        // float light;
         float bxdf;
+        float spectral;
     } pdf;
     
     int bounce;
@@ -55,8 +55,8 @@ struct PRDSpectral {
     uint instanceID;
 
     // for HWSS
-    float4 beta;
-    float4 logPOrefix;
+    // float4 beta;
+    // float4 logPOrefix;
 };
 
 struct ShadowPRD {

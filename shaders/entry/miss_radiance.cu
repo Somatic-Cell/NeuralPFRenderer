@@ -140,24 +140,23 @@ extern "C" __global__ void __miss__radiance_sky_spectral()
         optixLaunchParams.sunParams.sunAzimuthRad
     );
 
-    const float spectralMISWeight = hwssSpectralWeight(prd.logPOrefix);
+    // const float misWeight = hwssSpectralWeight(prd.logPOrefix);
     const atmo::SkySamplingConfig config;
-    const float uHero = prd.waveLengthNormalized;
-    constexpr int C = 4;
-    const float invC = 1.0f / (float)C;
+    const float uNormalized = prd.waveLengthNormalized;
+    // constexpr int C = 4;
+    // const float invC = 1.0f / (float)C;
     float weight = 1.0f;
-    for(int k = 0; k < C; ++k)
-    {
-        const float u_k = wrap01(uHero + float(k) * invC);
-        const float L = atmo::evalSkyMissSpectralFixedObserver(
-           optixLaunchParams.atmo,
-           config,
-           optixLaunchParams.spectral.D65,
-           u_k,
-           viewDir,
-           sunDir
-        );
-        if(prd.bounce > 0){
+    
+    const float L = atmo::evalSkyMissSpectralFixedObserver(
+        atmo,
+        config,
+        optixLaunchParams.spectral.D65,
+        uNormalized,
+        viewDir,
+        sunDir
+    );
+
+    if(prd.bounce > 0){
         const float pdfLight = atmo::evalSkyEmitterMixturePdf(
             config,
             viewDir,
@@ -167,11 +166,9 @@ extern "C" __global__ void __miss__radiance_sky_spectral()
         weight = balanceHeuristicWeight(
             1, fmaxf(prd.pdf.bxdf,  1.0e-7f),
             1, fmaxf(pdfLight,      1.0e-7f));
-        }
-
-        float beta_k = (&prd.beta.x)[k];
-        (&prd.contribution.x)[k] += L * weight * beta_k * spectralMISWeight;
     }
-    
+
+    prd.contribution += L * weight / prd.pdf.bxdf / prd.pdf.spectral; // bounce == 0 では prd.bxdf = 1.0f 
     prd.continueTrace = false;
+    return;
 }

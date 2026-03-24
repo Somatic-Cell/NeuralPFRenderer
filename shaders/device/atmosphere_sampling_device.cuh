@@ -21,8 +21,8 @@ struct SkySamplingConfig
     float vmfKappa            = 128.0f;
 
     float weightSunDisk       = 0.0f;
-    float weightSunVMF        = 0.65f;
-    float weightUniformSphere = 0.35f;
+    float weightSunVMF        = 0.85f;
+    float weightUniformSphere = 0.15f;
 
     float groundAlbedo        = 0.03f;
     int   renderLowerGround   = 1; // miss で下半球地面も描く
@@ -444,7 +444,7 @@ __device__ __forceinline__ SkyLightSample sampleSkyEmitterMixture(
     const float wsum = normalizedProposalWeightSum(cfg);
     const float wSun = cfg.weightSunDisk       / wsum;
     const float wVmf = cfg.weightSunVMF        / wsum;
-    const float wUni = cfg.weightUniformSphere / wsum;
+    // const float wUni = cfg.weightUniformSphere / wsum;
 
     if(uChoose < wSun) {
         s.component = 0;

@@ -17,6 +17,7 @@
 #include <array>
 #include <unordered_map>
 #include <mutex>
+#include <cmath>
 
 #include "optix8.hpp"
 
@@ -33,6 +34,22 @@ inline void ensureOpenVDBInitialized()
 }
 
 // -----------------------------------
+// Macrocell majorant grid
+// -----------------------------------
+struct MacrocellMajorantGrid {
+    CUDABuffer  buffer;
+    int3        baseCoord = make_int3(0);
+    int3        dims      = make_int3(0);
+    int         cellSizeVoxels  = 8;     // voxels / macrocell
+    size_t      cellCount       = 0;
+    size_t      nonZeroCellCount = 0;
+    size_t      bytes           = 0;
+    float       maxValue        = 0.0f;
+
+    bool valid() const {return cellCount > 0 && bytes > 0; }
+};
+
+// -----------------------------------
 // VDB の 1種類のグリッドを表す構造体
 // -----------------------------------
 struct NanoVDBGrid {
@@ -46,6 +63,7 @@ struct NanoVDBGrid {
     size_t      gridOffsetBytes = 0;
     std::array<float, 3> worldMin{0, 0, 0};
     std::array<float, 3> worldMax{0, 0, 0};
+    MacrocellMajorantGrid macro;
 
     CUdeviceptr deviceGridPtr() const {return buffer.getDevicePointer() + gridOffsetBytes;}
 };
@@ -66,6 +84,19 @@ public:
     // move は OK
     NanoVDBVolumeAsset(NanoVDBVolumeAsset&&) noexcept = default;
     NanoVDBVolumeAsset& operator=(NanoVDBVolumeAsset&&) noexcept = default;
+
+    void setMacrocellCellSizeVoxels(int cellSize)
+    {
+        if(cellSize <= 0) {
+            throw std::runtime_error("macrocell call size must be > 0.");
+        }
+        m_macrocellCellSizeVoxels = cellSize;
+    }
+
+    int getMacrocellCellSizeVoxels() const
+    {
+        return m_macrocellCellSizeVoxels;
+    }
     
     // float グリッドをすべてロード
     void loadAllFloatGrids(const std::string& vdbPath)
@@ -83,7 +114,7 @@ public:
             auto floatGrid = openvdb::gridPtrCast<openvdb::FloatGrid>(base);
             if(!floatGrid) continue;
 
-            NanoVDBGrid grid    = buildFromFloatGrid(*floatGrid);
+            NanoVDBGrid grid    = buildFromFloatGrid(*floatGrid, m_macrocellCellSizeVoxels);
             grid.name           = base->getName();
             grid.vdbType        = base->type();
 
@@ -122,7 +153,7 @@ public:
                 throw std::runtime_error("Grid is not openVDB::FloatGrid (gridName = " + gridName + ")"); 
             }
 
-            NanoVDBGrid grid    = buildFromFloatGrid(*floatGrid);
+            NanoVDBGrid grid    = buildFromFloatGrid(*floatGrid, m_macrocellCellSizeVoxels);
             grid.name           = gridName;
             grid.vdbType        = base->type();
 
@@ -228,6 +259,8 @@ public:
 
 
 private:
+    int m_macrocellCellSizeVoxels = 8;
+
     static bool isEquals(const std::string& a, const std::string& b){
         if(a.size() != b.size()) return false;
         for(size_t i = 0; i < a.size(); ++i){
@@ -278,8 +311,117 @@ private:
         // fallback は unordered_map の begin() ではなく、ソート済み先頭で安定化
         return names.front();
     }
+
+    static size_t flatten3D(int x, int y, int z, const int3& dims)
+    {
+        return (static_cast<size_t>(z) * static_cast<size_t>(dims.y)
+              + static_cast<size_t>(y)) * static_cast<size_t>(dims.x)
+              + static_cast<size_t>(x);
+    }
+
+    static void updateMajorantCell(
+        std::vector<float>& majorants,
+        const int3& dims,
+        int mx, int my, int mz,
+        float value)
+    {
+        if (mx < 0 || my < 0 || mz < 0) return;
+        if (mx >= dims.x || my >= dims.y || mz >= dims.z) return;
+        const size_t idx = flatten3D(mx, my, mz, dims);
+        majorants[idx] = std::max(majorants[idx], value);
+    }
+
+    static MacrocellMajorantGrid buildMacrocellMajorantFromFloatGrid(
+        const openvdb::FloatGrid& floatGrid,
+        const openvdb::CoordBBox& bbox,
+        int cellSizeVoxels)
+    {
+        if (cellSizeVoxels <= 0) {
+            throw std::runtime_error("cellSizeVoxels must be > 0.");
+        }
+
+        MacrocellMajorantGrid out;
+        out.cellSizeVoxels = cellSizeVoxels;
+
+        const openvdb::Coord bMin = bbox.min();
+        const openvdb::Coord bMax = bbox.max();
+
+        out.baseCoord = make_int3(bMin.x(), bMin.y(), bMin.z());
+
+        const int3 voxelDims = make_int3(
+            bMax.x() - bMin.x() + 1,
+            bMax.y() - bMin.y() + 1,
+            bMax.z() - bMin.z() + 1
+        );
+
+        out.dims = make_int3(
+            (voxelDims.x + cellSizeVoxels - 1) / cellSizeVoxels,
+            (voxelDims.y + cellSizeVoxels - 1) / cellSizeVoxels,
+            (voxelDims.z + cellSizeVoxels - 1) / cellSizeVoxels
+        );
+
+        out.cellCount =
+            static_cast<size_t>(out.dims.x) *
+            static_cast<size_t>(out.dims.y) *
+            static_cast<size_t>(out.dims.z);
+
+        if (out.cellCount == 0) {
+            throw std::runtime_error("macrocell grid is empty.");
+        }
+
+        std::vector<float> hostMajorants(out.cellCount, 0.0f);
+
+        // active voxel のみ走査して，各 macrocell の max density を構築する。
+        // trilinear 補間の upper-neighbor を保守的に含めるため，
+        // macrocell 先頭 voxel に位置する active voxel は 1 つ前の cell にも反映する。
+        for (auto it = floatGrid.cbeginValueOn(); it; ++it) {
+            const float v = static_cast<float>(*it);
+            if (!(v > 0.0f)) continue;
+
+            const openvdb::Coord ijk = it.getCoord();
+
+            const int lx = ijk.x() - out.baseCoord.x;
+            const int ly = ijk.y() - out.baseCoord.y;
+            const int lz = ijk.z() - out.baseCoord.z;
+
+            if (lx < 0 || ly < 0 || lz < 0) continue;
+
+            const int mx = lx / cellSizeVoxels;
+            const int my = ly / cellSizeVoxels;
+            const int mz = lz / cellSizeVoxels;
+
+            const bool touchPrevX = (lx % cellSizeVoxels) == 0;
+            const bool touchPrevY = (ly % cellSizeVoxels) == 0;
+            const bool touchPrevZ = (lz % cellSizeVoxels) == 0;
+
+            const int oxMax = touchPrevX ? 1 : 0;
+            const int oyMax = touchPrevY ? 1 : 0;
+            const int ozMax = touchPrevZ ? 1 : 0;
+
+            for (int oz = 0; oz <= ozMax; ++oz) {
+                for (int oy = 0; oy <= oyMax; ++oy) {
+                    for (int ox = 0; ox <= oxMax; ++ox) {
+                        updateMajorantCell(hostMajorants, out.dims, mx - ox, my - oy, mz - oz, v);
+                    }
+                }
+            }
+        }
+
+        out.maxValue = 0.0f;
+        out.nonZeroCellCount = 0;
+        for (float v : hostMajorants) {
+            out.maxValue = std::max(out.maxValue, v);
+            if (v > 0.0f) ++out.nonZeroCellCount;
+        }
+
+        out.bytes = hostMajorants.size() * sizeof(float);
+        out.buffer.resize(out.bytes);
+        out.buffer.upload(hostMajorants.data(), hostMajorants.size());
+
+        return out;
+    }
     
-    static NanoVDBGrid buildFromFloatGrid(openvdb::FloatGrid& floatGrid){
+    static NanoVDBGrid buildFromFloatGrid(openvdb::FloatGrid& floatGrid, int macrocellCellSizeVoxels){
         NanoVDBGrid out;
 
         // Active voxel bbox
@@ -304,6 +446,8 @@ private:
 
         double bboxMin[3] = {corners[0].x(), corners[0].y(), corners[0].z()};
         double bboxMax[3] = {corners[0].x(), corners[0].y(), corners[0].z()};
+        // CPU で macrocell majorant grid を構築して先に GPU へアップロード
+        out.macro = buildMacrocellMajorantFromFloatGrid(floatGrid, bbox, macrocellCellSizeVoxels);
 
         for(int i = 1; i < 8; ++i){
             bboxMin[0] = std::min(bboxMin[0], corners[i].x());
@@ -316,6 +460,7 @@ private:
 
         out.worldMin = {(float)bboxMin[0], (float)bboxMin[1], (float)bboxMin[2]};
         out.worldMax = {(float)bboxMax[0], (float)bboxMax[1], (float)bboxMax[2]};
+        
 
         // OpenVDB -> NanoVDB
         auto hostHandle = nanovdb::tools::createNanoGrid(floatGrid);
@@ -348,6 +493,12 @@ private:
 
         std::cout   << "[NanoVDB] loaded grid=" << floatGrid.getName() << "\n"
                     << "bytes = " << out.bytes << "\n"
+                    << "macrocell cellSize = " << out.macro.cellSizeVoxels << "\n"
+                    << "macrocell dims = ("
+                    << out.macro.dims.x << ", " << out.macro.dims.y << ", " << out.macro.dims.z << ")\n"
+                    << "macrocell nonZero / total = "
+                    << out.macro.nonZeroCellCount << " / " << out.macro.cellCount << "\n"
+                    << "macrocell max density = " << out.macro.maxValue << "\n"
                     << "bbox = (" 
                     << out.worldMin[0] << ", " << out.worldMin[1] << ", " << out.worldMin[2] << ")-("
                     << out.worldMax[0] << ", " << out.worldMax[1] << ", " << out.worldMax[2] << ")\n";

@@ -1978,46 +1978,54 @@ void Renderer::setDensityScale(const float densityScale)
 
 void Renderer::loadVDB()
 {
-    m_vdbAssets = std::make_shared<NanoVDBVolumeAsset>();
-    for(const auto& obj : m_sceneDesc.objects){
-        if(obj.type == "vdb"){
+    try {
+        m_vdbAssets = std::make_shared<NanoVDBVolumeAsset>();
+        for(const auto& obj : m_sceneDesc.objects){
+            if(obj.type == "vdb"){
 
-            std::filesystem::path exePath;
-            char pathBuffer[MAX_PATH] = {};
-#if defined(_WIN32)
-            if(GetModuleFileNameA(NULL, pathBuffer, MAX_PATH) == 0){
-                std::cerr << "ERROR: GetModuleFileNameA failed" << std::endl;
+                std::filesystem::path exePath;
+                char pathBuffer[MAX_PATH] = {};
+    #if defined(_WIN32)
+                if(GetModuleFileNameA(NULL, pathBuffer, MAX_PATH) == 0){
+                    std::cerr << "ERROR: GetModuleFileNameA failed" << std::endl;
+                }
+        exePath = std::filesystem::path(pathBuffer);
+    #else
+                ssize_t count = readlink("/proc/self/exe", exePath, PATH_MAX);
+                if(count == -1) {
+                    std::cerr << "ERROR: readlink() failed" << std::endl;
+                }
+    #endif
+                std::filesystem::path vdbDir = exePath.parent_path().parent_path().parent_path().parent_path() / "model/vdb" / obj.file;
+                std::cout << "VDB Path:" << vdbDir << std::endl;
+
+                // m_vdbAssets->loadAllFloatGrids(vdbDir.string());
+                m_vdbAssets->setMacrocellCellSizeVoxels(8);
+                m_vdbAssets->loadDensityLikeFloatGrid(vdbDir.string());
+                float bMin[3];
+                float bMax[3];
+
+
+                // const auto& grids = m_vdbAssets->m_grids;
+                // const NanoVDBGrid& grid = grids.begin()->second;
+                const NanoVDBGrid& grid = m_vdbAssets->getPrimaryGrid();
+                std::cout << "[NanoVDB] primary grid = " << m_vdbAssets->getPrimaryGridName() << std::endl;
+
+                std::copy(grid.worldMin.begin(), grid.worldMin.end(), bMin);
+                std::copy(grid.worldMax.begin(), grid.worldMax.end(), bMax);
+                OptixAabb aabb = {bMin[0], bMin[1], bMin[2], bMax[0], bMax[1], bMax[2]};
+                std::vector<OptixAabb> h_aabb;
+                h_aabb.push_back(aabb);
+                m_vdbAABBBuffer.allocAndUpload(h_aabb);
+                m_hasVDB = true;
+                m_launchParams.vdbAABBs = (OptixAabb*)m_vdbAABBBuffer.getDevicePointer();
             }
-    exePath = std::filesystem::path(pathBuffer);
-#else
-            ssize_t count = readlink("/proc/self/exe", exePath, PATH_MAX);
-            if(count == -1) {
-                std::cerr << "ERROR: readlink() failed" << std::endl;
-            }
-#endif
-            std::filesystem::path vdbDir = exePath.parent_path().parent_path().parent_path().parent_path() / "model/vdb" / obj.file;
-            std::cout << "VDB Path:" << vdbDir << std::endl;
-            // m_vdbAssets->loadAllFloatGrids(vdbDir.string());
-            m_vdbAssets->loadDensityLikeFloatGrid(vdbDir.string());
-            float bMin[3];
-            float bMax[3];
-
-            // const auto& grids = m_vdbAssets->m_grids;
-            // const NanoVDBGrid& grid = grids.begin()->second;
-            const NanoVDBGrid& grid = m_vdbAssets->getPrimaryGrid();
-            std::cout << "[NanoVDB] primary grid = " << m_vdbAssets->getPrimaryGridName() << std::endl;
-
-            std::copy(grid.worldMin.begin(), grid.worldMin.end(), bMin);
-            std::copy(grid.worldMax.begin(), grid.worldMax.end(), bMax);
-            OptixAabb aabb = {bMin[0], bMin[1], bMin[2], bMax[0], bMax[1], bMax[2]};
-            std::vector<OptixAabb> h_aabb;
-            h_aabb.push_back(aabb);
-            m_vdbAABBBuffer.allocAndUpload(h_aabb);
-            m_hasVDB = true;
-            m_launchParams.vdbAABBs = (OptixAabb*)m_vdbAABBBuffer.getDevicePointer();
         }
     }
-
+    catch (const std::exception& e) {
+        std::cerr << "[loadVDB] exception: " << e.what() << std::endl;
+        throw;
+    }
 }
 
 void Renderer::loadAssets()
@@ -2132,13 +2140,32 @@ void Renderer::loadAssets()
         return;
     }
 
-    const auto& grids = m_vdbAssets->m_grids;
-    const NanoVDBGrid& grid = grids.begin()->second;
+    // const auto& grids = m_vdbAssets->m_grids;
+    // const NanoVDBGrid& grid = grids.begin()->second;
+    const NanoVDBGrid& grid = m_vdbAssets->getPrimaryGrid();
     
     VDBGeomData vdbData {};
     vdbData.nanoGrid        = grid.deviceGridPtr();
     vdbData.densityScale    = 1.0f;
     vdbData.emissionScale   = 1.0f;
+    vdbData.nanoGrid              = grid.deviceGridPtr();
+    vdbData.macroMajorant         = grid.macro.buffer.getDevicePointer();
+    vdbData.densityScale          = 1.0f;
+    vdbData.emissionScale         = 1.0f;
+    vdbData.macroMaxDensity       = grid.macro.maxValue;
+    vdbData.macroCellSizeVoxels   = grid.macro.cellSizeVoxels;
+    vdbData.macroBaseCoord        = make_int4(
+        grid.macro.baseCoord.x,
+        grid.macro.baseCoord.y,
+        grid.macro.baseCoord.z,
+        0
+    );
+    vdbData.macroDims             = make_int4(
+        grid.macro.dims.x,
+        grid.macro.dims.y,
+        grid.macro.dims.z,
+        0
+    );
 
     m_vdbTable.push_back(vdbData);
     

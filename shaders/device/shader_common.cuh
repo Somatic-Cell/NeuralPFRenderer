@@ -76,7 +76,7 @@ inline __device__ __host__ void rotate(const float3 _u, const float r, float3& v
 
 inline __device__ __host__ float3 random_unit_hemisphere(float rnd1, float rnd2)
 {
-    float a = rnd1 * 2.f * M_PI;
+    float a = rnd1 * 2.f * (float)M_PI;
     float z = rnd2;
     float r = fmaxf(0.0f, sqrtf(1.f - z * z));
     return make_float3(r * cosf(a), z, r * sinf(a));
@@ -90,7 +90,7 @@ inline __device__ __host__ float3 random_unit_sphere(float rnd1, float rnd2)
 
     // 球上の一点をサンプリング（極座標表現）
     costheta = 2.f * rnd1 - 1.f; // 0 < theta < pi
-    phi = 2.f * M_PI * rnd2;
+    phi = 2.f * (float)M_PI * rnd2;
 
     sintheta = sqrtf(1.f - costheta * costheta);
 
@@ -132,10 +132,10 @@ inline __device__ __host__ float3 worldToLocal(const float3 v, const float3 loca
 inline __device__ __host__ void orthogonalToUVCoord(const float3 dir, float* u, float* v) {
     // const float3 dir = normalize(_dir);
     float phi = atan2f(dir.z, dir.x);
-    if(phi < 0.0f) phi += 2.0f * M_PI;
+    if(phi < 0.0f) phi += 2.0f * (float)M_PI;
     float theta = acosf(fminf(fmaxf(dir.y, -1.0f), 1.0f));
-    *u = phi / (2.f * M_PI);
-    *v = theta / M_PI;
+    *u = phi / (2.f * (float)M_PI);
+    *v = theta / (float)M_PI;
 }
 
 
@@ -310,10 +310,10 @@ static __forceinline__ __device__ void thetaPhiFromPatch(
     float v0 = float(row)       / float(hp);
     float v1 = float(row + 1)   / float(hp);
     
-    *phi0 = 2.0f * M_PI * u0;
-    *phi1 = 2.0f * M_PI * u1;
-    *theta0 = M_PI * v0;
-    *theta1 = M_PI * v1;
+    *phi0 = 2.0f * (float)M_PI * u0;
+    *phi1 = 2.0f * (float)M_PI * u1;
+    *theta0 = (float)M_PI * v0;
+    *theta1 = (float)M_PI * v1;
 }
 
 static __forceinline__ __device__ float2 envUVFromSpherical(

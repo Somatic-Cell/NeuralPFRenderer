@@ -4,11 +4,12 @@
 #include <optix.h>
 #include <nanovdb/math/SampleFromVoxels.h>
 #include <nanovdb/NanoVDB.h>
-#include <nanovdb/math/HDDA.h> 
+// #include <nanovdb/math/HDDA.h> 
 
 #include "../config.cuh"
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
+#include <math_constants.h>
 #include "../../utils/helper_math.h"
 #include "../../utils/my_math.hpp"
 #include "../params/per_ray_data.cuh"
@@ -21,14 +22,14 @@
 #include <cuda_fp16.h>      // half を使うなら（OptixCoopVec<half, N> 等）
 #endif
 
-static __forceinline__ __device__
-int floorDivInt(int a, int b)
-{
-    int q = a / b;
-    int r = a % b;
-    if (r != 0 && ((r > 0) != (b > 0))) --q; // C/C++ の /,% は 0 方向丸めなので補正
-    return q;
-}
+// static __forceinline__ __device__
+// int floorDivInt(int a, int b)
+// {
+//     int q = a / b;
+//     int r = a % b;
+//     if (r != 0 && ((r > 0) != (b > 0))) --q; // C/C++ の /,% は 0 方向丸めなので補正
+//     return q;
+// }
 
 template <typename AccT>
 static __forceinline__ __device__
@@ -42,6 +43,155 @@ static __forceinline__ __device__
 int floorToInt(float x)
 {
     return __float2int_rd(x);
+}
+
+
+struct LocalSegment
+{
+    float tEnd;     // セグメントの終わりまでの距離
+    float majorant; // セグメント内の局所的な上界
+};
+
+struct MacrocellView
+{
+    const float* majorants = nullptr;   // density の最大値を格納
+    int3  baseCoord = make_int3(0, 0, 0);
+    int3  dims      = make_int3(0, 0, 0);
+    int   cellSizeVoxels = 0;
+    float densityScale   = 1.0f;
+    float sigmaTScale    = 1.0f;
+    float fallbackDensityMax = 0.0f;   // macro grid 不在時の fallback
+};
+
+static __forceinline__ __device__
+MacrocellView makeMacrocellView(const VDBGeomData& vdb, float sigmaTScale)
+{
+    MacrocellView out;
+    out.majorants = reinterpret_cast<const float*>(vdb.macroMajorant);
+    out.baseCoord = make_int3(vdb.macroBaseCoord.x, vdb.macroBaseCoord.y, vdb.macroBaseCoord.z);
+    out.dims      = make_int3(vdb.macroDims.x,      vdb.macroDims.y,      vdb.macroDims.z);
+    out.cellSizeVoxels    = vdb.macroCellSizeVoxels;
+    out.densityScale      = vdb.densityScale;
+    out.sigmaTScale       = sigmaTScale;
+    out.fallbackDensityMax = vdb.macroMaxDensity;
+    return out;
+}
+
+static __forceinline__ __device__
+bool macrocellGridValid(const MacrocellView& macro)
+{
+    return macro.majorants != nullptr &&
+           macro.cellSizeVoxels > 0 &&
+           macro.dims.x > 0 &&
+           macro.dims.y > 0 &&
+           macro.dims.z > 0;
+}
+
+static __forceinline__ __device__
+size_t flattenMacrocellCoord(const int3& c, const int3& dims)
+{
+    return (static_cast<size_t>(c.z) * static_cast<size_t>(dims.y)
+          + static_cast<size_t>(c.y)) * static_cast<size_t>(dims.x)
+          + static_cast<size_t>(c.x);
+}
+
+static __forceinline__ __device__
+bool isInsideMacrocellGrid(const int3& c, const int3& dims)
+{
+    return (c.x >= 0 && c.y >= 0 && c.z >= 0 &&
+            c.x < dims.x && c.y < dims.y && c.z < dims.z);
+}
+
+static __forceinline__ __device__
+int3 pointIndexToMacrocellCoord(const MacrocellView& macro, const nanovdb::Vec3f& pI)
+{
+    const float invCell = 1.0f / float(macro.cellSizeVoxels);
+    return make_int3(
+        floorToInt((pI[0] - float(macro.baseCoord.x)) * invCell),
+        floorToInt((pI[1] - float(macro.baseCoord.y)) * invCell),
+        floorToInt((pI[2] - float(macro.baseCoord.z)) * invCell)
+    );
+}
+
+static __forceinline__ __device__
+float lookupMacrocellMajorantDensity(const MacrocellView& macro, const int3& cell)
+{
+    if (!macrocellGridValid(macro)) {
+        return fmaxf(macro.fallbackDensityMax, 0.0f);
+    }
+    if (!isInsideMacrocellGrid(cell, macro.dims)) {
+        return 0.0f;
+    }
+    const size_t idx = flattenMacrocellCoord(cell, macro.dims);
+    return fmaxf(macro.majorants[idx], 0.0f);
+}
+
+static __forceinline__ __device__
+float macrocellBoundaryT(
+    const MacrocellView& macro,
+    const nanovdb::Vec3f& rayOriginIndex,
+    const nanovdb::Vec3f& rayDirectionIndex,
+    const int3& cell,
+    int axis)
+{
+    const float d = rayDirectionIndex[axis];
+    if (fabsf(d) < 1e-20f) {
+        return CUDART_INF_F;
+    }
+
+    const int base = (&macro.baseCoord.x)[axis];
+    const int c    = (&cell.x)[axis];
+    const int cs   = macro.cellSizeVoxels;
+
+    const float boundaryIndex =
+        (d > 0.0f)
+        ? float(base + (c + 1) * cs)
+        : float(base + c * cs);
+
+    return (boundaryIndex - rayOriginIndex[axis]) / d;
+}
+
+static __forceinline__ __device__
+LocalSegment getMacrocellSegment(
+    const MacrocellView& macro,
+    const nanovdb::Vec3f& rayOriginIndex,
+    const nanovdb::Vec3f& rayDirectionIndex,
+    float t,
+    float tExit)
+{
+    LocalSegment seg;
+    seg.tEnd = tExit;
+    seg.majorant = 0.0f;
+
+    if (!(tExit > t)) {
+        return seg;
+    }
+
+    // 現在セルの曖昧さを避けるため，ごく小さく前進してからセルを決める
+    const float dirLen = fmaxf(length(make_float3(rayDirectionIndex[0], rayDirectionIndex[1], rayDirectionIndex[2])), 1e-20f);
+    const float dt = 1e-3f / dirLen;
+    const float tt = fminf(tExit, nextafterf(t, tExit) + dt);
+
+    const nanovdb::Vec3f pI = rayOriginIndex + tt * rayDirectionIndex;
+    const int3 cell = pointIndexToMacrocellCoord(macro, pI);
+
+    // macro grid の外は 0 扱いにしてそのまま tExit まで飛ばす
+    if (!isInsideMacrocellGrid(cell, macro.dims)) {
+        seg.tEnd = tExit;
+        seg.majorant = 0.0f;
+        return seg;
+    }
+
+    const float densityUpper = lookupMacrocellMajorantDensity(macro, cell);
+    seg.majorant = densityUpper * macro.densityScale * macro.sigmaTScale;
+
+    float tEnd = tExit;
+    tEnd = fminf(tEnd, macrocellBoundaryT(macro, rayOriginIndex, rayDirectionIndex, cell, 0));
+    tEnd = fminf(tEnd, macrocellBoundaryT(macro, rayOriginIndex, rayDirectionIndex, cell, 1));
+    tEnd = fminf(tEnd, macrocellBoundaryT(macro, rayOriginIndex, rayDirectionIndex, cell, 2));
+
+    seg.tEnd = fminf(tExit, fmaxf(tEnd, nextafterf(t, tExit)));
+    return seg;
 }
 
 static __forceinline__ __device__
@@ -70,251 +220,247 @@ nanovdb::Vec3f worldToIndexVector(
     return grid->map().applyInverseJacobian(vW);
 }
 
-static __forceinline__ __device__
-bool intersectAABBVec3(
-    const nanovdb::Vec3f& origin,
-    const nanovdb::Vec3f& direction,
-    const nanovdb::Vec3f& bMin, 
-    const nanovdb::Vec3f& bMax,
-    float tMin, float tMax,
-    float& tEnter,  // aabb との交差位置（手前）
-    float& tExit    // aabb との交差位置（奥）
-)
-{
-    float t0 = tMin;
-    float t1 = tMax;
-    auto slab = [&](float oA, float dA, float mn, float mx) -> bool 
-    { 
-        if (fabsf(dA) < 1e-20f) { // 平行：原点がスラブ外なら不交差 
-            return (oA >= mn && oA <= mx); 
-        } const float invD = 1.0f / dA; 
-        float tNear = (mn - oA) * invD; 
-        float tFar  = (mx - oA) * invD;
+// static __forceinline__ __device__
+// bool intersectAABBVec3(
+//     const nanovdb::Vec3f& origin,
+//     const nanovdb::Vec3f& direction,
+//     const nanovdb::Vec3f& bMin, 
+//     const nanovdb::Vec3f& bMax,
+//     float tMin, float tMax,
+//     float& tEnter,  // aabb との交差位置（手前）
+//     float& tExit    // aabb との交差位置（奥）
+// )
+// {
+//     float t0 = tMin;
+//     float t1 = tMax;
+//     auto slab = [&](float oA, float dA, float mn, float mx) -> bool 
+//     { 
+//         if (fabsf(dA) < 1e-20f) { // 平行：原点がスラブ外なら不交差 
+//             return (oA >= mn && oA <= mx); 
+//         } const float invD = 1.0f / dA; 
+//         float tNear = (mn - oA) * invD; 
+//         float tFar  = (mx - oA) * invD;
 
-        if (tNear > tFar) { 
-            float tmp = tNear; 
-            tNear = tFar; 
-            tFar = tmp; 
-        } 
-        t0 = fmaxf(t0, tNear); 
-        t1 = fminf(t1, tFar); 
-        return (t0 < t1); 
-    };
+//         if (tNear > tFar) { 
+//             float tmp = tNear; 
+//             tNear = tFar; 
+//             tFar = tmp; 
+//         } 
+//         t0 = fmaxf(t0, tNear); 
+//         t1 = fminf(t1, tFar); 
+//         return (t0 < t1); 
+//     };
 
-    for(int ax = 0; ax < 3; ++ax){
-        if(!slab(origin[ax], direction[ax], bMin[ax], bMax[ax])) return false;
-    }
+//     for(int ax = 0; ax < 3; ++ax){
+//         if(!slab(origin[ax], direction[ax], bMin[ax], bMax[ax])) return false;
+//     }
 
-    float tE = t0;
-    float tX = t1;
+//     float tE = t0;
+//     float tX = t1;
 
-    if(tX <= tE) return false;
+//     if(tX <= tE) return false;
 
-    tEnter  = fmaxf(tMin, tE);
-    tExit   = fminf(tMax, tX);
+//     tEnter  = fmaxf(tMin, tE);
+//     tExit   = fminf(tMax, tX);
 
-    return (tEnter < tExit);
-}
+//     return (tEnter < tExit);
+// }
 
 
-struct LocalSegment
-{
-    float tEnd;     // セグメントの終わりまでの距離
-    float majorant; // セグメント内の局所的な上界
-};
 
-struct IndexRay
-{
-    using RealType = float;
-    using Vec3Type = nanovdb::Vec3f;
 
-    __hostdev__ IndexRay() = default;
+// struct IndexRay
+// {
+//     using RealType = float;
+//     using Vec3Type = nanovdb::Vec3f;
 
-    __hostdev__ IndexRay(const Vec3Type& eye, const Vec3Type& dir, float t0, float t1)
-        : mEye(eye), mDir(dir), mT0(t0), mT1(t1)
-    {
-        // invDir の 0 割り回避
-        mInv = Vec3Type(
-            fabsf(mDir[0]) > 1e-20f ? 1.0f / mDir[0] : nanovdb::math::Maximum<float>::value(),
-            fabsf(mDir[1]) > 1e-20f ? 1.0f / mDir[1] : nanovdb::math::Maximum<float>::value(),
-            fabsf(mDir[2]) > 1e-20f ? 1.0f / mDir[2] : nanovdb::math::Maximum<float>::value()
-        );
-    }
+//     __hostdev__ IndexRay() = default;
 
-    __hostdev__ Vec3Type operator()(float t) const { return mEye + t * mDir; }
-    __hostdev__ const Vec3Type& dir()    const { return mDir; }
-    __hostdev__ const Vec3Type& invDir() const { return mInv; }
-    __hostdev__ float t0() const { return mT0; }
-    __hostdev__ float t1() const { return mT1; }
+//     __hostdev__ IndexRay(const Vec3Type& eye, const Vec3Type& dir, float t0, float t1)
+//         : mEye(eye), mDir(dir), mT0(t0), mT1(t1)
+//     {
+//         // invDir の 0 割り回避
+//         mInv = Vec3Type(
+//             fabsf(mDir[0]) > 1e-20f ? 1.0f / mDir[0] : nanovdb::math::Maximum<float>::value(),
+//             fabsf(mDir[1]) > 1e-20f ? 1.0f / mDir[1] : nanovdb::math::Maximum<float>::value(),
+//             fabsf(mDir[2]) > 1e-20f ? 1.0f / mDir[2] : nanovdb::math::Maximum<float>::value()
+//         );
+//     }
 
-    Vec3Type mEye, mDir, mInv;
-    float    mT0 = 0.0f, mT1 = 0.0f;
-};
+//     __hostdev__ Vec3Type operator()(float t) const { return mEye + t * mDir; }
+//     __hostdev__ const Vec3Type& dir()    const { return mDir; }
+//     __hostdev__ const Vec3Type& invDir() const { return mInv; }
+//     __hostdev__ float t0() const { return mT0; }
+//     __hostdev__ float t1() const { return mT1; }
 
-#ifndef VDB_TRACKING_HALO_MAJORANT
-#define VDB_TRACKING_HALO_MAJORANT 1
-#endif
+//     Vec3Type mEye, mDir, mInv;
+//     float    mT0 = 0.0f, mT1 = 0.0f;
+// };
 
-template<typename AccT>
-struct LeafSegmentStepper
-{
-    using TreeType = nanovdb::FloatGrid::TreeType;
-    static constexpr int LEAF_DIM = TreeType::LeafNodeType::DIM;
+// #ifndef VDB_TRACKING_HALO_MAJORANT
+// #define VDB_TRACKING_HALO_MAJORANT 1
+// #endif
 
-    using RayT = IndexRay;
-    using DDA  = nanovdb::math::DDA<RayT, nanovdb::Coord, LEAF_DIM>;
+// template<typename AccT>
+// struct LeafSegmentStepper
+// {
+//     using TreeType = nanovdb::FloatGrid::TreeType;
+//     static constexpr int LEAF_DIM = TreeType::LeafNodeType::DIM;
 
-    __device__ LeafSegmentStepper(
-        const nanovdb::FloatGrid* grid,
-        const AccT& acc,
-        const nanovdb::Vec3f& rayOriginIndex,
-        const nanovdb::Vec3f& rayDirectionIndex,
-        float tEnter,
-        float tExit,
-        float densityScale,
-        float sigmaTScale
-    )
-        : mGrid(grid)
-        , mAcc(acc)
-        , mRay(rayOriginIndex, rayDirectionIndex, tEnter, tExit)
-        , mDensityScale(densityScale)
-        , mSigmaTScale(sigmaTScale)
-    {
-        mDda.init(mRay, tEnter, tExit);
-        updateCurrentSegment();
-    }
+//     using RayT = IndexRay;
+//     using DDA  = nanovdb::math::DDA<RayT, nanovdb::Coord, LEAF_DIM>;
 
-    __device__ bool valid() const
-    {
-        // mDda.time() は現在境界（セグメント開始相当）
-        return mDda.time() < mRay.t1();
-    }
+//     __device__ LeafSegmentStepper(
+//         const nanovdb::FloatGrid* grid,
+//         const AccT& acc,
+//         const nanovdb::Vec3f& rayOriginIndex,
+//         const nanovdb::Vec3f& rayDirectionIndex,
+//         float tEnter,
+//         float tExit,
+//         float densityScale,
+//         float sigmaTScale
+//     )
+//         : mGrid(grid)
+//         , mAcc(acc)
+//         , mRay(rayOriginIndex, rayDirectionIndex, tEnter, tExit)
+//         , mDensityScale(densityScale)
+//         , mSigmaTScale(sigmaTScale)
+//     {
+//         mDda.init(mRay, tEnter, tExit);
+//         updateCurrentSegment();
+//     }
 
-    __device__ const LocalSegment& seg() const { return mSeg; }
+//     __device__ bool valid() const
+//     {
+//         // mDda.time() は現在境界（セグメント開始相当）
+//         return mDda.time() < mRay.t1();
+//     }
 
-    __device__ bool advance() // 次ブロックへ
-    {
-        if (!mDda.step()) return false;
-        updateCurrentSegment();
-        return true;
-    }
+//     __device__ const LocalSegment& seg() const { return mSeg; }
 
-private:
-    __device__ void updateCurrentSegment()
-    {
-        // 次境界時刻（＝セグメント終端）
-        float tEnd = mDda.next();
+//     __device__ bool advance() // 次ブロックへ
+//     {
+//         if (!mDda.step()) return false;
+//         updateCurrentSegment();
+//         return true;
+//     }
 
-        // 数値誤差で tEnd==現在になったときに停滞しないように少し前進
-        const float t0 = mDda.time();
-        tEnd = fmaxf(tEnd, nextafterf(t0, mRay.t1()));
+// private:
+//     __device__ void updateCurrentSegment()
+//     {
+//         // 次境界時刻（＝セグメント終端）
+//         float tEnd = mDda.next();
 
-        mSeg.tEnd = tEnd;
+//         // 数値誤差で tEnd==現在になったときに停滞しないように少し前進
+//         const float t0 = mDda.time();
+//         tEnd = fmaxf(tEnd, nextafterf(t0, mRay.t1()));
 
-        // ブロック原点（LEAF_DIM アライン）
-        const nanovdb::Coord base = mDda.voxel();
+//         mSeg.tEnd = tEnd;
 
-        float vmax = mAcc.getNodeInfo(base).maximum;
+//         // ブロック原点（LEAF_DIM アライン）
+//         const nanovdb::Coord base = mDda.voxel();
 
-#if VDB_TRACKING_HALO_MAJORANT
-        // trilinear の halo を簡易に保守化（+方向の隣接 leaf を見る）
-        // まずは 8 個（0/1 の組合せ）で十分なことが多いです
-        #pragma unroll
-        for (int dz = 0; dz <= 1; ++dz)
-        #pragma unroll
-        for (int dy = 0; dy <= 1; ++dy)
-        #pragma unroll
-        for (int dx = 0; dx <= 1; ++dx) {
-            const nanovdb::Coord nb = base + nanovdb::Coord(dx * LEAF_DIM, dy * LEAF_DIM, dz * LEAF_DIM);
-            vmax = fmaxf(vmax, mAcc.getNodeInfo(nb).maximum);
-        }
-#endif
+//         float vmax = mAcc.getNodeInfo(base).maximum;
 
-        mSeg.majorant = fmaxf(vmax * mDensityScale * mSigmaTScale, 0.0f);
-    }
+// #if VDB_TRACKING_HALO_MAJORANT
+//         // trilinear の halo を簡易に保守化（+方向の隣接 leaf を見る）
+//         // まずは 8 個（0/1 の組合せ）で十分なことが多いです
+//         #pragma unroll
+//         for (int dz = 0; dz <= 1; ++dz)
+//         #pragma unroll
+//         for (int dy = 0; dy <= 1; ++dy)
+//         #pragma unroll
+//         for (int dx = 0; dx <= 1; ++dx) {
+//             const nanovdb::Coord nb = base + nanovdb::Coord(dx * LEAF_DIM, dy * LEAF_DIM, dz * LEAF_DIM);
+//             vmax = fmaxf(vmax, mAcc.getNodeInfo(nb).maximum);
+//         }
+// #endif
 
-    const nanovdb::FloatGrid* mGrid = nullptr;
-    const AccT&               mAcc;
-    RayT                      mRay;
-    DDA                       mDda;
-    LocalSegment              mSeg;
-    float                     mDensityScale = 1.0f;
-    float                     mSigmaTScale  = 1.0f;
-};
+//         mSeg.majorant = fmaxf(vmax * mDensityScale * mSigmaTScale, 0.0f);
+//     }
 
-template<typename AccT>
-static __forceinline__ __device__
-LocalSegment getLocalSegment(
-    const nanovdb::FloatGrid* grid,
-    const AccT & acc,
-    const nanovdb::Vec3f& rayOriginWorld,
-    const nanovdb::Vec3f& rayDirectionWorld,
-    const nanovdb::Vec3f& rayOriginIndex,
-    const nanovdb::Vec3f& rayDirectionIndex,
-    float t,            // 現在の距離
-    float tExitWorld,   // 外までの距離
-    float densityScale,
-    float sigmaTScale,
-    float globalMajorant
-)
-{
-    LocalSegment seg;
-    seg.tEnd = tExitWorld;
-    seg.majorant = 0.0f;
+//     const nanovdb::FloatGrid* mGrid = nullptr;
+//     const AccT&               mAcc;
+//     RayT                      mRay;
+//     DDA                       mDda;
+//     LocalSegment              mSeg;
+//     float                     mDensityScale = 1.0f;
+//     float                     mSigmaTScale  = 1.0f;
+// };
 
-    // 現在よりも少しだけ前進した位置のセル情報を取得
-    const float epsIndex = 1e-3f;
-    const float dirIndexLength = fmaxf(length(make_float3(rayDirectionIndex[0], rayDirectionIndex[1], rayDirectionIndex[2])), 1e-20f);
-    const float dt = epsIndex / dirIndexLength;
+// template<typename AccT>
+// static __forceinline__ __device__
+// LocalSegment getLocalSegment(
+//     const nanovdb::FloatGrid* grid,
+//     const AccT & acc,
+//     const nanovdb::Vec3f& rayOriginWorld,
+//     const nanovdb::Vec3f& rayDirectionWorld,
+//     const nanovdb::Vec3f& rayOriginIndex,
+//     const nanovdb::Vec3f& rayDirectionIndex,
+//     float t,            // 現在の距離
+//     float tExitWorld,   // 外までの距離
+//     float densityScale,
+//     float sigmaTScale,
+//     float globalMajorant
+// )
+// {
+//     LocalSegment seg;
+//     seg.tEnd = tExitWorld;
+//     seg.majorant = 0.0f;
 
-    const float tt = fminf(tExitWorld, nextafterf(t, tExitWorld) + dt);
+//     // 現在よりも少しだけ前進した位置のセル情報を取得
+//     const float epsIndex = 1e-3f;
+//     const float dirIndexLength = fmaxf(length(make_float3(rayDirectionIndex[0], rayDirectionIndex[1], rayDirectionIndex[2])), 1e-20f);
+//     const float dt = epsIndex / dirIndexLength;
 
-    const nanovdb::Vec3f pI = rayOriginIndex + tt * rayDirectionIndex;
-    const nanovdb::Coord ijk = floorToCoord(pI + nanovdb::Vec3f(0.5f));
+//     const float tt = fminf(tExitWorld, nextafterf(t, tExitWorld) + dt);
 
-    // NodeInfo をとる
-    const auto info = acc.getNodeInfo(ijk);
+//     const nanovdb::Vec3f pI = rayOriginIndex + tt * rayDirectionIndex;
+//     const nanovdb::Coord ijk = floorToCoord(pI + nanovdb::Vec3f(0.5f));
 
-    // const int dim = info.mDim();          // ノードのサイズ (おそらく 8 の倍数)
-    // printf("ndim : %d\n", dim);
-    const float vmax = info.maximum;   // この node / tile の最大密度
+//     // NodeInfo をとる
+//     const auto info = acc.getNodeInfo(ijk);
 
-    // using TreeType = nanovdb::FloatGrid::TreeType;
-    // constexpr int LEAF_DIM = TreeType::LeafNodeType::DIM;
+//     // const int dim = info.mDim();          // ノードのサイズ (おそらく 8 の倍数)
+//     // printf("ndim : %d\n", dim);
+//     const float vmax = info.maximum;   // この node / tile の最大密度
 
-    // const int bx = floorDivInt(ijk[0], LEAF_DIM) * LEAF_DIM;
-    // const int by = floorDivInt(ijk[1], LEAF_DIM) * LEAF_DIM;
-    // const int bz = floorDivInt(ijk[2], LEAF_DIM) * LEAF_DIM;
+//     // using TreeType = nanovdb::FloatGrid::TreeType;
+//     // constexpr int LEAF_DIM = TreeType::LeafNodeType::DIM;
 
-    // const nanovdb::Coord bbMinC(bx, by, bz); 
-    // const nanovdb::Coord bbMaxC(bx + LEAF_DIM - 1, by  + LEAF_DIM - 1, bz  + LEAF_DIM - 1);
+//     // const int bx = floorDivInt(ijk[0], LEAF_DIM) * LEAF_DIM;
+//     // const int by = floorDivInt(ijk[1], LEAF_DIM) * LEAF_DIM;
+//     // const int bz = floorDivInt(ijk[2], LEAF_DIM) * LEAF_DIM;
+
+//     // const nanovdb::Coord bbMinC(bx, by, bz); 
+//     // const nanovdb::Coord bbMaxC(bx + LEAF_DIM - 1, by  + LEAF_DIM - 1, bz  + LEAF_DIM - 1);
     
-    const nanovdb::Coord bbMinC = info.bbox.min(); 
-    const nanovdb::Coord bbMaxC = info.bbox.max();
+//     const nanovdb::Coord bbMinC = info.bbox.min(); 
+//     const nanovdb::Coord bbMaxC = info.bbox.max();
     
-    const nanovdb::Vec3f bbMin(
-        (float)bbMinC[0] - 1.0f,
-        (float)bbMinC[1] - 1.0f, 
-        (float)bbMinC[2] - 1.0f);
-    const nanovdb::Vec3f bbMax(
-        (float)bbMaxC[0] + 1.0f, 
-        (float)bbMaxC[1] + 1.0f, 
-        (float)bbMaxC[2] + 1.0f);
+//     const nanovdb::Vec3f bbMin(
+//         (float)bbMinC[0] - 1.0f,
+//         (float)bbMinC[1] - 1.0f, 
+//         (float)bbMinC[2] - 1.0f);
+//     const nanovdb::Vec3f bbMax(
+//         (float)bbMaxC[0] + 1.0f, 
+//         (float)bbMaxC[1] + 1.0f, 
+//         (float)bbMaxC[2] + 1.0f);
 
-    float tNear, tFar;
-    if(intersectAABBVec3(rayOriginIndex, rayDirectionIndex, bbMin, bbMax, t, tExitWorld, tNear, tFar)){
-        seg.tEnd = fminf(tFar, tExitWorld);
-        seg.tEnd = fmaxf(seg.tEnd, nextafterf(t, tExitWorld));
-    } else {
-        seg.tEnd = tExitWorld;
-    }
+//     float tNear, tFar;
+//     if(intersectAABBVec3(rayOriginIndex, rayDirectionIndex, bbMin, bbMax, t, tExitWorld, tNear, tFar)){
+//         seg.tEnd = fminf(tFar, tExitWorld);
+//         seg.tEnd = fmaxf(seg.tEnd, nextafterf(t, tExitWorld));
+//     } else {
+//         seg.tEnd = tExitWorld;
+//     }
 
-    // seg.majorant = fmaxf(vmax * densityScale * sigmaTScale, 0.0f);
-    // local majorant にせず，empty span だけ飛ばし，active span 内では global majorant を使う
-    const float localUpper = fmaxf(vmax * densityScale * sigmaTScale, 0.0f);
-    seg.majorant = (localUpper > 0.0f) ? globalMajorant : 0.0f;
-    return seg;
-}
+//     // seg.majorant = fmaxf(vmax * densityScale * sigmaTScale, 0.0f);
+//     // local majorant にせず，empty span だけ飛ばし，active span 内では global majorant を使う
+//     const float localUpper = fmaxf(vmax * densityScale * sigmaTScale, 0.0f);
+//     seg.majorant = (localUpper > 0.0f) ? globalMajorant : 0.0f;
+//     return seg;
+// }
 
 static __forceinline__ __device__
 float sampleFreeFlight(
@@ -333,6 +479,7 @@ template <class PRD, class AccT, class SamplerT>
 static __forceinline__ __device__
 bool deltaTrack_localMajorant(
     PRD& prd,
+    const VDBGeomData& vdb,
     const float densityScale,
     const nanovdb::FloatGrid* grid,
     const AccT& acc,
@@ -347,9 +494,9 @@ bool deltaTrack_localMajorant(
 {
     if(!(tExit > tEnter)) return false;
 
-    if (!optixLaunchParams.vdbs) return false;
+    // if (!optixLaunchParams.vdbs) return false;
 
-    
+    (void)acc;
 
     const nanovdb::Vec3f rayOriginWorld(rayOriginObject.x, rayOriginObject.y, rayOriginObject.z);
     const nanovdb::Vec3f rayDirectionWorld(rayDirectionObject.x, rayDirectionObject.y, rayDirectionObject.z);
@@ -358,15 +505,17 @@ bool deltaTrack_localMajorant(
     const nanovdb::Vec3f rayDirectionIndex  = worldToIndexVector(grid, rayOriginWorld, rayDirectionWorld);
     
     float t = tEnter;
-    LocalSegment seg;
+    // LocalSegment seg;
     
     // seg = getLocalSegment(
     //     grid, acc, rayOriginWorld, rayDirectionWorld, rayOriginIndex, rayDirectionIndex,
     //     t, tExit, densityScale, sigmaTScale
     // );
     
-    seg.tEnd = tExit;
-    seg.majorant = grid->tree().root().maximum() * densityScale * sigmaTScale;
+    // seg.tEnd = tExit;
+    // seg.majorant = grid->tree().root().maximum() * densityScale * sigmaTScale;
+    const MacrocellView macro = makeMacrocellView(vdb, sigmaTScale);
+    LocalSegment seg = getMacrocellSegment(macro, rayOriginIndex, rayDirectionIndex, t, tExit);
 
     // RNG state をローカルへ退避（レジスタに乗りやすい）
     Random random = prd.random;
@@ -384,6 +533,15 @@ bool deltaTrack_localMajorant(
         //     );
         //     continue;
         // }
+        if(seg.majorant <= 0.0f){
+            t = seg.tEnd;
+            if(t >= tExit) {
+                prd.random = random;
+                return false;
+            }
+            seg = getMacrocellSegment(macro, rayOriginIndex, rayDirectionIndex, t, tExit);
+            continue;
+        }
         
         const float tCand = t + sampleFreeFlight(random(), seg.majorant);
         // セルをはみ出すくらい大きな工程をサンプリングしたら，境界で止める
@@ -397,6 +555,7 @@ bool deltaTrack_localMajorant(
             //     grid, acc, rayOriginWorld, rayDirectionWorld, rayOriginIndex, rayDirectionIndex,
             //     t, tExit, densityScale, sigmaTScale
             // );
+            seg = getMacrocellSegment(macro, rayOriginIndex, rayDirectionIndex, t, tExit);
             continue;
         }
 
@@ -427,6 +586,7 @@ template <class PRD, class AccT, class SamplerT>
 static __forceinline__ __device__
 float ratioTrack_localMajorant(
     PRD& prd,
+    const VDBGeomData& vdb,
     const float densityScale,
     const nanovdb::FloatGrid* grid,
     const AccT& acc,
@@ -440,9 +600,10 @@ float ratioTrack_localMajorant(
 {
     if(!(tExit > tEnter)) return 1.0f;
 
-    if (!optixLaunchParams.vdbs) return 1.0f;
+    // if (!optixLaunchParams.vdbs) return 1.0f;
 
-    if(!(tExit > tEnter)) return 1.0f;
+    // if(!(tExit > tEnter)) return 1.0f;
+    (void) acc;
 
     const nanovdb::Vec3f rayOriginWorld(rayOriginObject.x, rayOriginObject.y, rayOriginObject.z);
     const nanovdb::Vec3f rayDirectionWorld(rayDirectionObject.x, rayDirectionObject.y, rayDirectionObject.z);
@@ -452,15 +613,16 @@ float ratioTrack_localMajorant(
     float t = tEnter;
     float transmittance = 1.0f;
 
-    LocalSegment seg;
-    seg.tEnd = tExit;
-    seg.majorant = grid->tree().root().maximum() * densityScale * sigmaTScale;
+    // LocalSegment seg;
+    // seg.tEnd = tExit;
+    // seg.majorant = grid->tree().root().maximum() * densityScale * sigmaTScale;
 
     // seg = getLocalSegment(
     //     grid, acc, rayOriginWorld, rayDirectionWorld, rayOriginIndex, rayDirectionIndex,
     //     t, tExit, densityScale, sigmaTScale
     // );
-
+    const MacrocellView macro = makeMacrocellView(vdb, sigmaTScale);
+    LocalSegment seg = getMacrocellSegment(macro, rayOriginIndex, rayDirectionIndex, t, tExit);
     Random random = prd.random;
 
     for(int i = 0; i < 4096; ++i){
@@ -477,6 +639,12 @@ float ratioTrack_localMajorant(
         //     );
         //     continue;
         // }
+        if(seg.majorant <= 0.0f){
+            t = seg.tEnd;
+            if(t >= tExit) break;
+            seg = getMacrocellSegment(macro, rayOriginIndex, rayDirectionIndex, t, tExit);
+            continue;
+        }
         
         // 自由行程サンプリング
         const float tCand = t + sampleFreeFlight(random(), seg.majorant);
@@ -489,6 +657,7 @@ float ratioTrack_localMajorant(
             //     grid, acc, rayOriginWorld, rayDirectionWorld, rayOriginIndex, rayDirectionIndex,
             //     t, tExit, densityScale, sigmaTScale
             // );
+            seg = getMacrocellSegment(macro, rayOriginIndex, rayDirectionIndex, t, tExit);
             continue;
         }
 
