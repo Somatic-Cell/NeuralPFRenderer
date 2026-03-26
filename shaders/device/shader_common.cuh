@@ -492,22 +492,22 @@ float clampUnitFloat(float u)
 //     return result;
 // }
 
-// static __forceinline__ __device__
-// float evalWavelengthPdf(
-//     const SpectralParams& spectral,
-//     float lambdaNormalized)
-// {
-//     if (lambdaNormalized < 0.0f || lambdaNormalized >= 1.0f) {
-//         return 0.0f;
-//     }
+static __forceinline__ __device__
+float evalWavelengthPdf(
+    const SpectralParams& spectral,
+    float lambdaNormalized)
+{
+    if (lambdaNormalized < 0.0f || lambdaNormalized >= 1.0f) {
+        return 0.0f;
+    }
 
-//     const float x = lambdaNormalized * float(spectral.wavelengthBinCount);
-//     int bin = (int)x;
-//     bin = max(0, min(bin, spectral.wavelengthBinCount - 1));
+    const float x = lambdaNormalized * float(spectral.wavelengthBinCount);
+    int bin = (int)x;
+    bin = max(0, min(bin, spectral.wavelengthBinCount - 1));
 
-//     const float pmass = fmaxf(spectral.wavelengthPdf[bin], 0.0f);
-//     return pmass * spectral.wavelengthBinCount;
-// }
+    const float pmass = fmaxf(spectral.wavelengthPdf[bin], 0.0f);
+    return pmass * spectral.wavelengthBinCount;
+}
 
 static __forceinline__ __device__
 void makeONB(const float3& w, float3& t, float3& b)
@@ -570,19 +570,19 @@ SampledWavelength sampleWavelengthFromCdf(const SpectralParams& spectral, float 
     return result;
 }
 
-static __forceinline__ __device__
-float evalWavelengthPdf(const SpectralParams& spectral, float lambdaNormalized)
-{
-    if (lambdaNormalized < 0.0f || lambdaNormalized >= 1.0f) return 0.0f;
+// static __forceinline__ __device__
+// float evalWavelengthPdf(const SpectralParams& spectral, float lambdaNormalized)
+// {
+//     if (lambdaNormalized < 0.0f || lambdaNormalized >= 1.0f) return 0.0f;
 
-    const float x = lambdaNormalized * float(spectral.wavelengthBinCount);
-    int bin = (int)x;
-    bin = max(0, min(bin, spectral.wavelengthBinCount - 1));
+//     const float x = lambdaNormalized * float(spectral.wavelengthBinCount);
+//     int bin = (int)x;
+//     bin = max(0, min(bin, spectral.wavelengthBinCount - 1));
 
-    const float c0 = tex1Dfetch<float>(spectral.wavelengthCdfTex, bin);
-    const float c1 = tex1Dfetch<float>(spectral.wavelengthCdfTex, bin + 1);
-    const float pmass = fmaxf(c1 - c0, 0.0f);
+//     const float c0 = tex1Dfetch<float>(spectral.wavelengthCdfTex, bin);
+//     const float c1 = tex1Dfetch<float>(spectral.wavelengthCdfTex, bin + 1);
+//     const float pmass = fmaxf(c1 - c0, 0.0f);
 
-    return pmass * spectral.wavelengthBinCount; // 現行 semantics を維持
-}
+//     return pmass * spectral.wavelengthBinCount; // 現行 semantics を維持
+// }
 #endif // SHADER_COMMON_CUH_

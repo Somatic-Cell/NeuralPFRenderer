@@ -1917,6 +1917,7 @@ void Renderer::uploadSpectrumData()
 
     m_wavelengthPdfBuffer.allocAndUpload(m_wavelengthPdfHost);
 
+    m_launchParams.spectral.wavelengthCdfTex   = m_wavelengthCdfTex;
     m_launchParams.spectral.wavelengthPdf = 
         reinterpret_cast<const float*>(static_cast<uintptr_t>(m_wavelengthPdfBuffer.getDevicePointer()));
     // m_launchParams.spectral.wavelengthPdf = (float*)m_wavelengthPdfBuffer.getDevicePointer();
