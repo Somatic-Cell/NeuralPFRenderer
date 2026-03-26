@@ -149,11 +149,14 @@ struct SpectralParams {
     alignas(8) cudaTextureObject_t xyzFunc[3];
     alignas(8) cudaTextureObject_t upSampleFunc[3];
     alignas(8) cudaTextureObject_t D65;
+
+    alignas(8) cudaTextureObject_t wavelengthCdfTex = 0;
+
     float wavelengthMin     {390.0f};
     float wavelengthMax     {830.0f};
 
     const float* wavelengthPdf;
-    const float* wavelengthCdf;
+    // const float* wavelengthCdf;
     int         wavelengthBinCount;
     float       wavelengthBinWidth;
 };

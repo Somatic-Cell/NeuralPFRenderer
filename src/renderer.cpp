@@ -1903,12 +1903,24 @@ void Renderer::uploadSpectrumData()
         m_wavelengthPdfHost,
         m_wavelengthCdfHost
     );
+    m_wavelengthCdfBuffer.allocAndUpload(m_wavelengthCdfHost);
+    
+    if(m_wavelengthCdfTex){
+        CUDA_CHECK(cudaDestroyTextureObject(m_wavelengthCdfTex));
+        m_wavelengthCdfTex = 0;
+    }
+
+    m_wavelengthCdfTex = createLinearFloatTexture1D(
+        m_wavelengthCdfBuffer.getDevicePointer(),
+        m_wavelengthCdfBuffer.getSizeInBytes() 
+    );
 
     m_wavelengthPdfBuffer.allocAndUpload(m_wavelengthPdfHost);
-    m_wavelengthCdfBuffer.allocAndUpload(m_wavelengthCdfHost);
 
-    m_launchParams.spectral.wavelengthPdf = (float*)m_wavelengthPdfBuffer.getDevicePointer();
-    m_launchParams.spectral.wavelengthCdf = (float*)m_wavelengthCdfBuffer.getDevicePointer();
+    m_launchParams.spectral.wavelengthPdf = 
+        reinterpret_cast<const float*>(static_cast<uintptr_t>(m_wavelengthPdfBuffer.getDevicePointer()));
+    // m_launchParams.spectral.wavelengthPdf = (float*)m_wavelengthPdfBuffer.getDevicePointer();
+    // m_launchParams.spectral.wavelengthCdf = (float*)m_wavelengthCdfBuffer.getDevicePointer();
     m_launchParams.spectral.wavelengthBinCount = m_wavelengthBinCount;
     m_launchParams.spectral.wavelengthBinWidth = m_wavelengthBinWidth;
 

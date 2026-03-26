@@ -236,5 +236,21 @@ private:
     uint32_t m_depth            = 0;
 };
 
+static cudaTextureObject_t createLinearFloatTexture1D(CUdeviceptr dptr, size_t sizeInBytes)
+{
+    cudaResourceDesc resDesc{};
+    resDesc.resType = cudaResourceTypeLinear;
+    resDesc.res.linear.devPtr = reinterpret_cast<void*>(static_cast<uintptr_t>(dptr));
+    resDesc.res.linear.desc = cudaCreateChannelDesc<float>();
+    resDesc.res.linear.sizeInBytes = sizeInBytes;
+
+    cudaTextureDesc texDesc{};
+    texDesc.readMode = cudaReadModeElementType;
+    texDesc.normalizedCoords = 0;
+
+    cudaTextureObject_t tex = 0;
+    CUDA_CHECK(cudaCreateTextureObject(&tex, &resDesc, &texDesc, nullptr));
+    return tex;
+}
 
 #endif // CUDA_TEXTURE_H_

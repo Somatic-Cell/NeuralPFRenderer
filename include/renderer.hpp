@@ -6,6 +6,7 @@
 #include "helper_math.h"
 #include "my_math.hpp"
 #include "cuda_buffer.h"
+#include "cuda_texture.h"
 #include "model.h"
 #include "launch_params.h"
 #include "sceneDescIO.hpp"
@@ -293,6 +294,9 @@ protected:
     // D65 光源分布
     cudaArray_t                         m_D65Array;
     cudaTextureObject_t                 m_D65Object;
+
+    // 波長の重点的サンプリング用
+    cudaTextureObject_t                 m_wavelengthCdfTex {0};
 
     // VDB 
     std::shared_ptr<NanoVDBVolumeAsset> m_vdbAssets;
