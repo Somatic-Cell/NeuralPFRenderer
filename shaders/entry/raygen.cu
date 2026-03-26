@@ -111,9 +111,9 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
     const int ix = optixGetLaunchIndex().x;
     const int iy = optixGetLaunchIndex().y;
 
-    const int accumID = optixLaunchParams.frame.accumID;
-    const int frameID = optixLaunchParams.frame.frameID;
-    const auto &camera = optixLaunchParams.camera;
+    // const int accumID = optixLaunchParams.frame.accumID;
+    // const int frameID = optixLaunchParams.frame.frameID;
+    // const auto &camera = optixLaunchParams.camera;
 
     const uint32_t fbIndex = ix + iy * optixLaunchParams.frame.size.x;
 

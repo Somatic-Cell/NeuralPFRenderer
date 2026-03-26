@@ -71,6 +71,7 @@ struct FinalLUTs {
     FinalTable skyMultiple;         // nu, mu, mu_s, lambda
 };
 
+
 class AtmosphericLUTs {
 public:
     AtmosphericLUTs() = default;

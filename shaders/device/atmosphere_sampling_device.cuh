@@ -62,6 +62,20 @@ __device__ __forceinline__ float linearTexCoord01(float x01, uint32_t n)
     return (((float)(n - 1u) * x01) + 0.5f) / (float)n;
 }
 
+__device__ __forceinline__ float clampNuValid(float mu, float muS, float nu)
+{
+    mu  = clampSigned(mu);
+    muS = clampSigned(muS);
+    nu  = clampSigned(nu);
+
+    const float sinTheta  = sqrtf(fmaxf(0.0f, 1.0f - mu  * mu));
+    const float sinThetaS = sqrtf(fmaxf(0.0f, 1.0f - muS * muS));
+
+    const float lo = mu * muS - sinTheta * sinThetaS;
+    const float hi = mu * muS + sinTheta * sinThetaS;
+    return fminf(fmaxf(nu, lo), hi);
+}
+
 struct LambdaInterval01
 {
     uint32_t i0 = 0;
@@ -126,7 +140,8 @@ __device__ __forceinline__ float sampleSkyFamilyNoPhase(
     const auto li = findLambdaInterval01(lambdaNormalized, atmo.lambdaCount);
     const cudaTextureObject_t* handles = texHandlePtr(handleBuffer);
 
-    const float x = linearTexCoord01(skyNu01(nu),  atmo.skyNu);
+    const float nuValid = clampNuValid(mu, muS, nu);
+    const float x = linearTexCoord01(skyNu01(nuValid),  atmo.skyNu);
     const float y = linearTexCoord01(skyMu01(mu),  atmo.skyMu);
     const float z = linearTexCoord01(skyMuS01(muS, atmo.muSMin), atmo.skyMuS);
 

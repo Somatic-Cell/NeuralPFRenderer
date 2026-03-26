@@ -259,7 +259,34 @@ public:
 
 
 private:
-    int m_macrocellCellSizeVoxels = 8;
+        int m_macrocellCellSizeVoxels = 8;
+    
+        static void updateMajorantRange(
+        std::vector<float>& majorants,
+        const int3& dims,
+        int mx0, int my0, int mz0,
+        int mx1, int my1, int mz1,
+        float value)
+    {
+        mx0 = std::max(mx0, 0);
+        my0 = std::max(my0, 0);
+        mz0 = std::max(mz0, 0);
+    
+        mx1 = std::min(mx1, dims.x - 1);
+        my1 = std::min(my1, dims.y - 1);
+        mz1 = std::min(mz1, dims.z - 1);
+    
+        if (mx0 > mx1 || my0 > my1 || mz0 > mz1) return;
+    
+        for (int mz = mz0; mz <= mz1; ++mz) {
+            for (int my = my0; my <= my1; ++my) {
+                for (int mx = mx0; mx <= mx1; ++mx) {
+                    const size_t idx = flatten3D(mx, my, mz, dims);
+                    majorants[idx] = std::max(majorants[idx], value);
+                }
+            }
+        }
+    }
 
     static bool isEquals(const std::string& a, const std::string& b){
         if(a.size() != b.size()) return false;
@@ -378,33 +405,48 @@ private:
             const float v = static_cast<float>(*it);
             if (!(v > 0.0f)) continue;
 
-            const openvdb::Coord ijk = it.getCoord();
+            openvdb::CoordBBox valueBBox;
+            if (!it.getBoundingBox(valueBBox) || valueBBox.empty()) continue;
 
-            const int lx = ijk.x() - out.baseCoord.x;
-            const int ly = ijk.y() - out.baseCoord.y;
-            const int lz = ijk.z() - out.baseCoord.z;
+            const openvdb::Coord vMin = valueBBox.min();
+            const openvdb::Coord vMax = valueBBox.max();
 
-            if (lx < 0 || ly < 0 || lz < 0) continue;
+            // bbox 基準のローカル voxel 座標
+            const int lx0 = vMin.x() - out.baseCoord.x;
+            const int ly0 = vMin.y() - out.baseCoord.y;
+            const int lz0 = vMin.z() - out.baseCoord.z;
 
-            const int mx = lx / cellSizeVoxels;
-            const int my = ly / cellSizeVoxels;
-            const int mz = lz / cellSizeVoxels;
+            const int lx1 = vMax.x() - out.baseCoord.x;
+            const int ly1 = vMax.y() - out.baseCoord.y;
+            const int lz1 = vMax.z() - out.baseCoord.z;
 
-            const bool touchPrevX = (lx % cellSizeVoxels) == 0;
-            const bool touchPrevY = (ly % cellSizeVoxels) == 0;
-            const bool touchPrevZ = (lz % cellSizeVoxels) == 0;
+            // build 対象 bbox の外なら無視
+            if (lx1 < 0 || ly1 < 0 || lz1 < 0) continue;
+            if (lx0 >= voxelDims.x || ly0 >= voxelDims.y || lz0 >= voxelDims.z) continue;
 
-            const int oxMax = touchPrevX ? 1 : 0;
-            const int oyMax = touchPrevY ? 1 : 0;
-            const int ozMax = touchPrevZ ? 1 : 0;
+            // 対象 bbox に clamp
+            const int clx0 = std::max(lx0, 0);
+            const int cly0 = std::max(ly0, 0);
+            const int clz0 = std::max(lz0, 0);
 
-            for (int oz = 0; oz <= ozMax; ++oz) {
-                for (int oy = 0; oy <= oyMax; ++oy) {
-                    for (int ox = 0; ox <= oxMax; ++ox) {
-                        updateMajorantCell(hostMajorants, out.dims, mx - ox, my - oy, mz - oz, v);
-                    }
-                }
-            }
+            const int clx1 = std::min(lx1, voxelDims.x - 1);
+            const int cly1 = std::min(ly1, voxelDims.y - 1);
+            const int clz1 = std::min(lz1, voxelDims.z - 1);
+
+            int mx0 = clx0 / cellSizeVoxels;
+            int my0 = cly0 / cellSizeVoxels;
+            int mz0 = clz0 / cellSizeVoxels;
+
+            const int mx1 = clx1 / cellSizeVoxels;
+            const int my1 = cly1 / cellSizeVoxels;
+            const int mz1 = clz1 / cellSizeVoxels;
+
+            // 現行実装の "touchPrev*" を bbox の最小端へ一般化
+            if ((clx0 % cellSizeVoxels) == 0) --mx0;
+            if ((cly0 % cellSizeVoxels) == 0) --my0;
+            if ((clz0 % cellSizeVoxels) == 0) --mz0;
+
+            updateMajorantRange(hostMajorants, out.dims, mx0, my0, mz0, mx1, my1, mz1, v);
         }
 
         out.maxValue = 0.0f;

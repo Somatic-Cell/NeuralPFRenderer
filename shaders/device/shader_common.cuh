@@ -437,60 +437,6 @@ float clampUnitFloat(float u)
     return fminf(fmaxf(u, 0.0f), oneMinusEps);
 }
 
-// static __forceinline__ __device__
-// int findCdfBin(const float* cdf, int numBins, float u)
-// {
-//     int lo = 0;
-//     int hi = numBins - 1;
-
-//     while (lo < hi) {
-//         const int mid = (lo + hi) >> 1;
-
-//         // cdf[mid+1] <= u なら右側へ
-//         if (u >= cdf[mid + 1]) {
-//             lo = mid + 1;
-//         } else {
-//             hi = mid;
-//         }
-//     }
-
-//     return lo;
-// }
-
-// static __forceinline__ __device__
-// SampledWavelength sampleWavelengthFromCdf(
-//     const SpectralParams& spectral,
-//     float u)
-// {
-//     SampledWavelength result{};
-
-//     u = clampUnitFloat(u);
-
-//     const int   N       = spectral.wavelengthBinCount;
-//     const float lambda0 = spectral.wavelengthMin;
-//     const float dLambda = spectral.wavelengthBinWidth;
-
-//     const int bin = findCdfBin(spectral.wavelengthCdf, N, u);
-
-//     const float c0 = spectral.wavelengthCdf[bin];
-//     const float c1 = spectral.wavelengthCdf[bin + 1];
-//     const float pmass = fmaxf(c1 - c0, 0.0f);   // bin probability mass
-
-//     // u をその bin の局所座標 [0,1) に再マップ
-//     float xi = 0.5f;
-//     if (pmass > 0.0f) {
-//         xi = (u - c0) / pmass;
-//     }
-//     xi = clampUnitFloat(xi);
-
-//     const float lamMinBin = lambda0 + float(bin) * dLambda;
-//     const float lambda    = lamMinBin + xi * dLambda;
-
-//     result.lambda = lambda;
-//     result.pdf    = (pmass > 0.0f) ? (pmass / dLambda) : 0.0f;
-//     result.bin    = bin;
-//     return result;
-// }
 
 static __forceinline__ __device__
 float evalWavelengthPdf(
