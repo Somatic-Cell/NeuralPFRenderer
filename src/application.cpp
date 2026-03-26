@@ -58,19 +58,24 @@ void Application::draw() {
         glTexImage2D(GL_TEXTURE_2D, 0, texFormat, m_fbSize.x, m_fbSize.y, 0, texFormat, texelType, nullptr);
     }
 
-    cudaGraphicsMapResources(1, &m_cudaTexResource);
-    cudaGraphicsSubResourceGetMappedArray(&m_surfaceArray, m_cudaTexResource, 0, 0);
+    auto stream = m_renderer.getStream();
+
+    cudaGraphicsMapResources(1, &m_cudaTexResource, stream);
+
+    cudaArray_t surfaceArray = nullptr;
+    cudaGraphicsSubResourceGetMappedArray(&surfaceArray, m_cudaTexResource, 0, 0);
 
     cudaResourceDesc resDesc = {};
     resDesc.resType = cudaResourceTypeArray;
-    resDesc.res.array.array = m_surfaceArray;
+    resDesc.res.array.array = surfaceArray;
 
-    cudaCreateSurfaceObject(&m_surf, &resDesc);
+    cudaSurfaceObject_t surf = 0;
+    cudaCreateSurfaceObject(&surf, &resDesc);
 
-    copyBufferToSurface();
+    copyBufferToSurface(stream, surf);
+    cudaDestroySurfaceObject(surf);
 
-    cudaGraphicsUnmapResources(1, &m_cudaTexResource);
-    cudaDestroySurfaceObject(m_surf);
+    cudaGraphicsUnmapResources(1, &m_cudaTexResource, stream);
 
     glBindTexture(GL_TEXTURE_2D, m_fbTexture);
     
@@ -165,14 +170,14 @@ void Application::fetchCUDAFunction()
 }
 
 // GPU 上にある uint32_t 型の描画結果を，GPU 上の OpenGL テクスチャにコピー
-void Application::copyBufferToSurface()
+void Application::copyBufferToSurface(CUstream stream, cudaSurfaceObject_t surf)
 {
     int2 fbSize = m_renderer.getLaunchParams().frame.size;
     int2 blockSize = make_int2(32);
     int2 numBlocks = make_int2(std::ceil((float)fbSize.x / (float)blockSize.x), std::ceil((float)fbSize.y / (float)blockSize.y));
 
     CUdeviceptr finalColorBufferPtr = m_renderer.getFinalColorBuffer().getDevicePointer();
-    cudaSurfaceObject_t surface = m_surf;
+    cudaSurfaceObject_t surface = surf;
     
     void* arg0 = &finalColorBufferPtr;
     void* arg1 = &surface;
@@ -188,7 +193,7 @@ void Application::copyBufferToSurface()
             numBlocks.x, numBlocks.y, 1,    // スレッドのブロック数
             blockSize.x, blockSize.y, 1,    // 各ブロック内のスレッド数
             0,
-            0,
+            stream,
             args,
             nullptr 
         )

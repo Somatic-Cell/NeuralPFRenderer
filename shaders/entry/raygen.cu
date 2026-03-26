@@ -134,7 +134,7 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
 
         prd.contribution = 0.0f;
         prd.albedo   = 1.f;
-        prd.continueTrace = true;
+        prd.continueTrace = 1;
         prd.bounce = 0;
         prd.pdf.bxdf = 1.0f;
 
@@ -193,7 +193,7 @@ extern "C" __global__ void __raygen__renderFrame_spectral()
                 RADIANCE_RAY_TYPE,
                 u0, u1);
 
-            if(!prd.continueTrace){
+            if(!(prd.continueTrace == 1)){
                 break;
             }
             prd.bounce ++;

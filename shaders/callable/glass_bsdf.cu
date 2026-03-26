@@ -51,7 +51,7 @@ extern "C" __device__ float3 __direct_callable__bsdf_glass_eval_rgb(const float3
 
 extern "C" __device__ float3 __direct_callable__bsdf_glass_sample_spectral(const float3 wo, const IntersectedData_Spectral& material, PRDSpectral* prd)
 {
-    prd->lastHitMaterialType = MATERIAL_TYPE_GLASS;
+    // prd->lastHitMaterialType = MATERIAL_TYPE_GLASS;
 
     float cosThetaI = wo.y;
     float eta = 1.0f / material.ior;
@@ -87,6 +87,6 @@ extern "C" __device__ float3 __direct_callable__bsdf_glass_sample_spectral(const
 extern "C" __device__ float __direct_callable__bsdf_glass_eval_spectral(const float3 wi, const float3 wo, const IntersectedData_Spectral& material, PRDSpectral* prd)
 {
     prd->pdf.bxdf = 0.0f;
-    prd->lastHitMaterialType = MATERIAL_TYPE_GLASS;
+    // prd->lastHitMaterialType = MATERIAL_TYPE_GLASS;
     return 1.0f;
 }

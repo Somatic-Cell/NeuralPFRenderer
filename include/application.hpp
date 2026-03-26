@@ -296,7 +296,7 @@ public:
     virtual void key(int key, int mods) override;
     void createCUDAModule();
     void fetchCUDAFunction();
-    void copyBufferToSurface();
+    void copyBufferToSurface(CUstream stream, cudaSurfaceObject_t surf);
 
 protected:
     int2                    m_fbSize            {make_int2(1280, 720)};

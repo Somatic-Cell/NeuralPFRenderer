@@ -641,7 +641,7 @@ extern "C" __global__ void __closesthit__radiance_spectral()
     prd.position += 1e-3f * Ng;
     // prd.albedo *= bxdfValue * sampledWiLocal.y / fmaxf(prd.pdf.bxdf, 1e-7f);
     prd.wi = sampledWi; 
-    prd.continueTrace = true;
+    prd.continueTrace = 1;
     
     // if(prd.bounce == 0){
     //     prd.primaryNormal = Ns;

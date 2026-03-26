@@ -105,6 +105,8 @@ public:
     float getDensityScale() const;
     void setDensityScale(const float densityScale);
 
+    CUstream getStream () const;
+
     // Tonemap 用
     void setWhite(const float white);
     float getWhite() const;

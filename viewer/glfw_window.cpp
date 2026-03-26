@@ -149,7 +149,7 @@ void GLFWCameraWindow::run()
         using clock = std::chrono::steady_clock;
         const auto t0 = clock::now();
         render();
-        save("smoke");
+        // save("smoke");
         const auto t1 = clock::now();
 
         // const auto sec = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0).count();

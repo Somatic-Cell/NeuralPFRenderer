@@ -32,7 +32,7 @@ struct PRDSpectral {
     Random random;
 
     float3 position;
-    float3 wo;          // outgoing direction (カメラ方向，ワールド空間)
+    // float3 wo;          // outgoing direction (カメラ方向，ワールド空間)
     float3 wi;          // incoming direction (光源方向，ワールド空間)
 
     float  albedo;
@@ -49,8 +49,8 @@ struct PRDSpectral {
     } pdf;
     
     int bounce;
-    int lastHitMaterialType;
-    bool continueTrace;
+    // int lastHitMaterialType;
+    uint32_t continueTrace;
 
     uint instanceID;
 

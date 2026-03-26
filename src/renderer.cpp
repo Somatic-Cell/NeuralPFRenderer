@@ -1272,7 +1272,7 @@ void Renderer::render()
         1
     ));
 
-    CUDA_SYNC_CHECK();
+    // CUDA_SYNC_CHECK();
 
     computeFinalPixelColors();
 
@@ -1303,6 +1303,7 @@ void Renderer::setCamera(const Camera &camera)
 
 void Renderer::downloadPixels(uint32_t m_h_pixels[])
 {
+    CUDA_CHECK(cudaStreamSynchronize(m_stream));
     m_finalColorBuffer.download(m_h_pixels, m_launchParams.frame.size.x * m_launchParams.frame.size.y);
 }
 
@@ -1415,7 +1416,7 @@ void Renderer::computeFinalPixelColors()
             numBlocks.x, numBlocks.y, 1,    // スレッドのブロック数
             blockSize.x, blockSize.y, 1,    // 各ブロック内のスレッド数
             0,
-            0,
+            m_stream,
             args,
             nullptr 
         )
@@ -2000,7 +2001,7 @@ void Renderer::loadVDB()
                 std::cout << "VDB Path:" << vdbDir << std::endl;
 
                 // m_vdbAssets->loadAllFloatGrids(vdbDir.string());
-                m_vdbAssets->setMacrocellCellSizeVoxels(8);
+                m_vdbAssets->setMacrocellCellSizeVoxels(16);
                 m_vdbAssets->loadDensityLikeFloatGrid(vdbDir.string());
                 float bMin[3];
                 float bMax[3];
@@ -2649,3 +2650,5 @@ bool Renderer::loadAtmosphere()
 
     return true;
 }
+
+CUstream Renderer::getStream() const { return m_stream; }

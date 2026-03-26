@@ -72,7 +72,7 @@ extern "C" __global__ void __miss__radiance_spectral()
     
     if(prd.bounce == 0){
         prd.contribution += prd.albedo * emission * D65;
-        prd.continueTrace = false;
+        prd.continueTrace = 0;
         return;
     }
 
@@ -105,7 +105,7 @@ extern "C" __global__ void __miss__radiance_spectral()
     const float weight = balanceHeuristicWeight(1, fmaxf(prd.pdf.bxdf, 1e-7f), 1, fmaxf(pdfLight, 1e-7f));
     emission *= weight; 
     prd.contribution += emission * prd.albedo * D65;
-    prd.continueTrace = false;
+    prd.continueTrace = 0;
 }
 
 extern "C" __global__ void __miss__radiance_noEnvMap_rgb()
@@ -121,7 +121,7 @@ extern "C" __global__ void __miss__radiance_noEnvMap_rgb()
 extern "C" __global__ void __miss__radiance_noEnvMap_spectral()
 {
     PRDSpectral &prd = *getPRD<PRDSpectral>();
-    prd.continueTrace = false;
+    prd.continueTrace = 0;
     // if(prd.bounce == 0){
     //     prd.primaryAlbedo = make_float3(0.0f);
     //     prd.primaryNormal = - prd.wi; 
@@ -169,6 +169,6 @@ extern "C" __global__ void __miss__radiance_sky_spectral()
     }
 
     prd.contribution += L * weight / prd.pdf.bxdf / prd.pdf.spectral; // bounce == 0 では prd.bxdf = 1.0f 
-    prd.continueTrace = false;
+    prd.continueTrace = 0;
     return;
 }

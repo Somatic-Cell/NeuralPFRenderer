@@ -116,7 +116,7 @@ extern "C" __device__ float3 __direct_callable__brdf_principled_sample_spectral(
     // printf("Diffuse PDF %f, Specular PDF: %f \n", diffusePdf, specularPdf);
     
 
-    prd->lastHitMaterialType = MATERIAL_TYPE_PRINCIPLED_BRDF;
+    // prd->lastHitMaterialType = MATERIAL_TYPE_PRINCIPLED_BRDF;
     prd->pdf.bxdf = pdf;
     return wi;
 
@@ -154,7 +154,7 @@ extern "C" __device__ float __direct_callable__brdf_principled_eval_spectral(con
     const float diffuseColor = evalLambertBRDF_Spectral(baseColor, wo, wi);
     const float specularColor = evalSpecularBRDF_Spectral(alpha, F0, wo, wi);
 
-    prd->lastHitMaterialType = MATERIAL_TYPE_PRINCIPLED_BRDF;
+    // prd->lastHitMaterialType = MATERIAL_TYPE_PRINCIPLED_BRDF;
     float color = diffuseColor * (1.0f - metallic) + specularColor;
     return color;
 }

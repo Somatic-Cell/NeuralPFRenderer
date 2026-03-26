@@ -194,7 +194,7 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
     const float tEnter  = optixGetRayTmax();
     const float tExit   = __uint_as_float(optixGetAttribute_0());
     if(!(tExit > tEnter)){
-        prd.continueTrace = false;
+        prd.continueTrace = 0;
         return;
     }
     
@@ -406,7 +406,7 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
             prd.contribution = emission * transmittance * pdfPhase * misWeight / pdfLight / prd.pdf.spectral;
 
         }
-        prd.continueTrace = true;
+        prd.continueTrace = 1;
     }
 
     // --------------------------
@@ -452,7 +452,7 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
 //     const float phasePdf_k = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uNormalized, g_k), 1e-7f);
 // #endif
     
-    prd.continueTrace = true;
+    prd.continueTrace = 1;
     
     // if(prd.bounce == 0){
     //     prd.primaryNormal = make_float3(0.0f); // 媒質なので 0 埋め等
