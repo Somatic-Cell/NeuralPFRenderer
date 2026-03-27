@@ -168,7 +168,7 @@ extern "C" __global__ void __miss__radiance_sky_spectral()
             1, fmaxf(pdfLight,      1.0e-7f));
     }
 
-    prd.contribution += L * weight / prd.pdf.bxdf / prd.pdf.spectral; // bounce == 0 では prd.bxdf = 1.0f 
+    prd.contribution += L * weight / prd.pdf.spectral; // bounce == 0 では prd.bxdf = 1.0f 
     prd.continueTrace = 0;
     return;
 }

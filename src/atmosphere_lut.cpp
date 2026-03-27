@@ -588,7 +588,21 @@ void AtmosphericLUTs::validateInputs() const
 
 void AtmosphericLUTs::uploadSunTransmittance(const FinalTable& table)
 {
-    m_sunTransmittance.createFromHost(table.values.data(), table.header.dim0, table.header.dim1);
+    const uint32_t muSDim    = table.header.dim0;
+    const uint32_t lambdaDim = table.header.dim1;
+
+    std::vector<float> packed(static_cast<size_t>(muSDim) * lambdaDim);
+
+    for(uint32_t iMuS = 0; iMuS < muSDim; ++iMuS){
+        for(uint32_t iL = 0; iL < lambdaDim; ++iL){
+            // file: table.values[iMuS * lambdaDim + iL]
+            // tex : packed[iL * muSDim + iMuS]   (x=muS, y=lambda)
+            packed[static_cast<size_t>(iL) * muSDim + iMuS] =
+                table.values[static_cast<size_t>(iMuS) * lambdaDim + iL];
+        }
+    }
+
+    m_sunTransmittance.createFromHost(packed.data(), muSDim, lambdaDim);
     m_deviceData.sunTransmittanceTex = m_sunTransmittance.texture();
 }
 

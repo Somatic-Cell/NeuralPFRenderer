@@ -403,7 +403,7 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
             //     float add = emission * transmittance * pdfPhase * misWeight / pdfLight;
             //     (&prd.contribution.x)[k] += add;
             // }
-            prd.contribution = emission * transmittance * pdfPhase * misWeight / pdfLight / prd.pdf.spectral;
+            prd.contribution += prd.albedo * emission * transmittance * pdfPhase * misWeight / pdfLight / prd.pdf.spectral;
 
         }
         prd.continueTrace = 1;
