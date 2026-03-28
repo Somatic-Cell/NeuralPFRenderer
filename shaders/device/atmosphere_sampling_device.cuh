@@ -268,7 +268,8 @@ __device__ __forceinline__ float sunSolidAngle(float angularRadiusRad)
     return 2.0f * kPi * (1.0f - cosf(angularRadiusRad));
 }
 
-__device__ __forceinline__ float evalSunDiskRadianceSpectral(
+__device__ __forceinline__ float 
+evalSunDiskRadianceSpectral(
     const AtmosphereDeviceData& atmo,
     cudaTextureObject_t am0Tex,
     float waveLengthNormalized,
@@ -303,8 +304,8 @@ __device__ __forceinline__ float evalSkyRadianceSpectralFixedObserver(
     const float theta  = acosf(nu) / kPi;
 
     const float phaseR = phaseRayleigh(nu);
-    const float phaseM = phaseCornetteShanks(nu, 0.85f);
-    // const float phaseM = tex3D<float>(optixLaunchParams.mieTexture.pdf, theta, lambdaNmNormalized, 0.1f);
+    // const float phaseM = phaseCornetteShanks(nu, 0.85f);
+    const float phaseM = tex3D<float>(optixLaunchParams.mieTexture.pdf, theta, lambdaNmNormalized, 0.1f);
 
     float L = 0.0f;
     L += phaseR * sampleSkyFamilyNoPhase(atmo.skyRayleighTexHandles, atmo, mu, muS, nu, lambdaNmNormalized);
@@ -333,9 +334,9 @@ __device__ __forceinline__ float evalSkyMissSpectralFixedObserver(
     }
 
     // 太陽円盤
-    L += evalSunDiskRadianceSpectral(
-        atmo, am0Tex, wavelengthNormalized,
-        viewDir, sunDir, cfg.sunAngularRadiusRad);
+    // L += evalSunDiskRadianceSpectral(
+    //     atmo, am0Tex, wavelengthNormalized,
+    //     viewDir, sunDir, cfg.sunAngularRadiusRad);
 
     return fmaxf(L, 0.0f);
 }
