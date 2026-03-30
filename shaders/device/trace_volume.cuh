@@ -428,7 +428,8 @@ bool advanceMacroDDA(
 
 
 template <class PRD, class AccT, class SamplerT>
-static __forceinline__ __device__
+// static __forceinline__ __device__
+static __noinline__ __device__
 bool deltaTrack_localMajorant(
     PRD& prd,
     const VDBGeomData& vdb,
@@ -544,7 +545,8 @@ bool deltaTrack_localMajorant(
 }
 
 template <class PRD, class AccT, class SamplerT>
-static __forceinline__ __device__
+// static __forceinline__ __device__
+static __noinline__ __device__
 float ratioTrack_localMajorant(
     PRD& prd,
     const VDBGeomData& vdb,
@@ -628,11 +630,11 @@ float ratioTrack_localMajorant(
 
         transmittance *= ratio;
 
-        if(transmittance < 1e-6f) {
+        // ほぼ透過しない場合は打ち切る
+        if(transmittance < 1e-4f) {
             prd.random = random;
             return 0.0f;
         }
-             // ほぼ透過しない場合は打ち切る
     }
     prd.random = random;
     return transmittance;

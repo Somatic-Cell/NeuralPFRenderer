@@ -749,7 +749,7 @@ void Renderer::createOptiXModule()
     // m_moduleCompileOptions.maxRegisterCount     = 40;
     // m_moduleCompileOptions.optLevel             = OPTIX_COMPILE_OPTIMIZATION_DEFAULT;
     m_moduleCompileOptions.optLevel             = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
-    m_moduleCompileOptions.debugLevel           = OPTIX_COMPILE_DEBUG_LEVEL_NONE;
+    m_moduleCompileOptions.debugLevel           = OPTIX_COMPILE_DEBUG_LEVEL_MINIMAL;
     
     m_pipelineCompileOptions                        = {};
     m_pipelineCompileOptions.traversableGraphFlags  =                               // 設計した AS に合わせて最小限のフラグを使うのが望ましい

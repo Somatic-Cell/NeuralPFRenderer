@@ -231,7 +231,16 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
     auto sampler = makeSampler(acc);
 
     const float uDiameter = (7.5f - 5.0f) / (20.0f - 5.0f);
+    const float uWavelength = prd.waveLengthNormalized;
 
+
+#if !defined(PHASE_FUNCTION_TABULATED) && !defined(PHASE_FUNCTION_HG)
+    const float gHero = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uWavelength, uDiameter);
+    const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
+    const float uHeroNormalized     = uWavelength * 2.0f - 1.0f;
+    NSFPhiCache nfCache;
+    bool nfCacheBuilt = false;
+#endif
 // #if defined(PHASE_FUNCTION_TABULATED)
     MiePhaseTex miePhaseTex = {};
     miePhaseTex.pdfTex = optixLaunchParams.mieTexture.pdf;
@@ -369,10 +378,15 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
             const float g = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uNormalized, uDiameter);
             pdfPhase = fmaxf(evalPhaseFunctionHG(cosTheta, g), 1e-20f);
 #else
-            const float g = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uNormalized, uDiameter);
-            const float uRenormalized = 2.0f * uNormalized - 1.0f;
-            const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
-            pdfPhase = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uRenormalized, g), 1e-20f);
+            // const float g = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uNormalized, uDiameter);
+            // const float uRenormalized = 2.0f * uNormalized - 1.0f;
+            // const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
+            // pdfPhase = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uRenormalized, g), 1e-20f);
+            if(!nfCacheBuilt){
+                buildNSFPhiCache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
+                nfCacheBuilt = true;
+            }
+            pdfPhase = fmaxf(evalPhaseFunctionNF_phiCached(nfCache, cosTheta), 1e-20f);
 #endif
 
             // const float phaseValue  = phasePdf;
@@ -419,10 +433,15 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
     const float gHero = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uHero, uDiameter);
     PhaseSample ps = samplePhaseFunctionHG(rayDirectionWorld, prd.random(), prd.random(), gHero);
 #else
-    const float gHero = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uHero, uDiameter);
-    const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
-    const float uHeroNormalized = uHero * 2.0f - 1.0f;
-    PhaseSample ps = samplePhaseFunctionNF(optixLaunchParams, rayDirectionWorld, prd.random(), prd.random(), uDiameterNormalized, uHeroNormalized, gHero);
+    // const float gHero = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uHero, uDiameter);
+    // const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
+    // const float uHeroNormalized = uHero * 2.0f - 1.0f;
+    // PhaseSample ps = samplePhaseFunctionNF(optixLaunchParams, rayDirectionWorld, prd.random(), prd.random(), uDiameterNormalized, uHeroNormalized, gHero);
+    if(!nfCacheBuilt){
+        buildNSFPhiCache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
+        nfCacheBuilt = true;
+    }
+    PhaseSample ps = samplePhaseFunctionNF_phiCached(nfCache, rayDirectionWorld, prd.random(), prd.random());
 #endif
 
     prd.wi = ps.wi;

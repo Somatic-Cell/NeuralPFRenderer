@@ -56,15 +56,15 @@ add_subdirectory(${utils_dir}) # ${utils_dir} 以下にある CMakeList.txt を�
 set(EXT_DIR ${PROJECT_SOURCE_DIR}/ext)
 
 ### assimp
-option(ASSIMP_BUILD_ZLIB "Build your own zlib" ON)
-option(ASSIMP_BUILD_ASSIMP_TOOLS "If the supplementary tools for Assimp are built in addition to the library." OFF)
-option(ASSIMP_BUILD_SAMPLES "If the official samples are built as well (needs Glut)." OFF)
-option(ASSIMP_BUILD_TESTS "If the test suite for Assimp is built in addition to the library." OFF)
-option(ASSIMP_INSTALL "Disable this if you want to use assimp as a submodule." OFF)
-option(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT "Disable this if ." OFF)
-option(ASSIMP_NO_EXPORT "Disable this if you want to use assimp as a submodule." ON)
-option(ASSIMP_WARNINGS_AS_ERRORS    "" OFF)
-option(ASSIMP_BUILD_NO_EXCEPTIONS   "" OFF)
+option(ASSIMP_BUILD_ZLIB            ON  CACHE BOOL "Build your own zlib" FORCE)
+option(ASSIMP_BUILD_ASSIMP_TOOLS    OFF CACHE BOOL "If the supplementary tools for Assimp are built in addition to the library."  FORCE)
+option(ASSIMP_BUILD_SAMPLES         OFF CACHE BOOL "If the official samples are built as well (needs Glut)."  FORCE)
+option(ASSIMP_BUILD_TESTS           OFF CACHE BOOL "If the test suite for Assimp is built in addition to the library." FORCE)
+option(ASSIMP_INSTALL               OFF CACHE BOOL "Disable this if you want to use assimp as a submodule." FORCE)
+option(ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT OFF CACHE BOOL "Disable this if ." FORCE)
+option(ASSIMP_NO_EXPORT             ON  CACHE BOOL "Disable this if you want to use assimp as a submodule." FORCE)
+option(ASSIMP_WARNINGS_AS_ERRORS    OFF CACHE BOOL ""  FORCE)
+option(ASSIMP_BUILD_NO_EXCEPTIONS   OFF CACHE BOOL ""  FORCE)
 
 # Windows 環境
 if(MSVC)
@@ -143,8 +143,10 @@ option(OPENVDB_BUILD_NANOVDB "to enable NanoVDB" ON)
 option(OPENVDB_ENABLE_UNINSTALL "uninstall OpenVDB" OFF)
 option(NANOVDB_USE_OPENVDB "to use OpenVDB in NanoVDB" ON)
 
+
 add_subdirectory(${EXT_DIR}/openvdb)
 
+set(NANOVDB_INCLUDE_DIR "${EXT_DIR}/openvdb/nanovdb")
 
 # include(${utils_dir}/cmake/BuildVDB.cmake)
 
@@ -164,7 +166,7 @@ target_link_libraries(viewer
 # .cu ファイルのコンパイル
 # -----------------------------------------------------
 
-set(CPP_VER_CUDA c++17)
+set(CPP_VER_CUDA c++20)
 set(USE_OPTIX_IR FALSE)
 set(CUDA_CC 86)
 
@@ -200,7 +202,7 @@ if(OptiX9_FOUND)
     set(USE_OPTIX_IR TRUE)
 else()
     set(
-        ${CUDA_KERNELS}
+        CUDA_KERNELS
         ${CUDA_KERNELS}
         ${OPTIX_KERNELS}
     )
@@ -233,9 +235,10 @@ set(CUDA_NVCC_OPTIONS
     "-std=${CPP_VER_CUDA}"                  
     "-cudart" "hybrid"
     "--use_fast_math"                           # 精度を犠牲に高速な近似計算を実行
-    "--relocatable-device-code=false"
+    "--relocatable-device-code=true"
     "-I${OPTIX_INCLUDE_DIR}"
     "-Xptxas=-v, --warn-spills"
+    "-I${NANOVDB_INCLUDE_DIR}"
 )
 
 

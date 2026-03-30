@@ -143,7 +143,7 @@ VOut evalHyperLayer2(const LaunchParams& lp, int t, const VHid& in)
 //     y_out = evalHyperLayer2(lp, t, h1); // VOut(half×96)
 // }
 
-static __forceinline__ __device__
+static __noinline__ __device__
 // static __noinline__ __device__
 void evalHyperMLP_phi62_vec(const LaunchParams& lp, int t,
                             float c0, float c1, float c2,
@@ -195,6 +195,30 @@ float saturate_param(float v, float log_slope, float factor) {
     // deriv   = d / (1 + abs(d/log(slope)))
     const float denom = 1.0f + fabsf(factor * v / log_slope);
     return v / denom;
+}
+
+static __forceinline__ __device__
+void width_softmax_stats_from_phi(
+    const VOut& yphi,
+    float log_slope,
+    float& maxW,
+    float& invSumW)
+{
+    maxW = -1e30f;
+    #pragma unroll 4
+    for (int i = 0; i < NSF_BINS; ++i) {
+        const float vW = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
+        maxW = fmaxf(maxW, vW);
+    }
+
+    float sumW = 0.0f;
+    #pragma unroll 4
+    for (int i = 0; i < NSF_BINS; ++i) {
+        const float vW = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
+        sumW += __expf(vW - maxW);
+    }
+
+    invSumW = 1.0f / fmaxf(sumW, 1e-20f);
 }
 
 static __forceinline__ __device__
@@ -301,7 +325,7 @@ float dk_from_phi(const VOut& y, int knot, float log_slope)
     return __expf(d_raw);
 }
 
-static __forceinline__ __device__
+static __noinline__ __device__
 void rqs_forward_and_ladj(const Rqs1D& rqs, float x, float& y, float& ladj)
 {
     // k = searchsorted(horizontal, x) - 1
@@ -341,8 +365,8 @@ void rqs_forward_and_ladj(const Rqs1D& rqs, float x, float& y, float& ladj)
     ladj = logf(fmaxf(J, 1e-30f));
 }
 
-static __device__
-// static __noinline__ __device__
+// static __device__ 
+static __noinline__ __device__
 void rqs_forward_and_ladj_from_phiV(const VOut& yphi, float x, float& y, float& ladj,
                                     float bound = NSF_BOUND, float slope = NSF_SLOPE)
 {
@@ -354,24 +378,27 @@ void rqs_forward_and_ladj_from_phiV(const VOut& yphi, float x, float& y, float& 
     float u = (x / bound + 1.0f) * 0.5f;
     if (!(u > 0.0f && u < 1.0f)) { y = x; ladj = 0.0f; return; }
 
-    float w_exp[NSF_BINS];
-    float invW;
-    softmax_exp32_from_phi(yphi, 0,           log_slope, 2.0f, w_exp, invW);
+    float maxW, invSumW;
+width_softmax_stats_from_phi(yphi, log_slope, maxW, invSumW);
 
-    // bin 探索（x方向は cumW）
     float cw = 0.0f;
     int k = -1;
-    float x0u=0, x1u=0;
+    float x0u = 0.0f, x1u = 0.0f;
 
     #pragma unroll 1
     for (int i = 0; i < NSF_BINS; ++i) {
-        float w_sm = w_exp[i] * invW;
+        const float vW = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
+        const float eW = __expf(vW - maxW);
+        const float w_sm = eW * invSumW;
 
-        float x0 = cw; cw += w_sm; float x1 = cw;
-        // searchsorted_strict_lt(...)-1 と同等にするため「<=」で左側 bin を取る
+        const float x0 = cw;
+        cw += w_sm;
+        const float x1 = cw;
+
         if (k < 0 && u <= x1) {
             k = i;
-            x0u = x0; x1u = x1;
+            x0u = x0;
+            x1u = x1;
         }
     }
     if (k < 0 || k >= NSF_BINS) { y = x; ladj = 0.0f; return; }
@@ -538,7 +565,7 @@ void rqs_inverse_and_ladj_fwd(const Rqs1D& rqs, float y, float& x, float& ladj_f
     ladj_fwd = logf(fmaxf(J, 1e-30f));
 }
 
-static __device__
+static __noinline__ __device__ 
 // static __noinline__ __device__
 void rqs_inverse_and_ladj_fwd_from_phiV(const VOut& yphi, float y, float& x, float& ladj_fwd,
                                         float bound = NSF_BOUND, float slope = NSF_SLOPE)
@@ -549,11 +576,10 @@ void rqs_inverse_and_ladj_fwd_from_phiV(const VOut& yphi, float y, float& x, flo
     float v = (y / bound + 1.0f) * 0.5f;
     if (!(v > 0.0f && v < 1.0f)) { x = y; ladj_fwd = 0.0f; return; }
 
-    float w_exp[NSF_BINS];
-    float invW;
-    softmax_exp32_from_phi(yphi, 0,           log_slope, 2.0f, w_exp, invW);
+    float maxW, invSumW;
+    width_softmax_stats_from_phi(yphi, log_slope, maxW, invSumW);
 
-    // ---- HLESS: height softmax を配列無しで (max->sum->scan) ----
+    // 既存どおり HLESS のための maxH / sumH を計算
     float maxH = -1e30f;
     #pragma unroll 4
     for (int i = 0; i < NSF_BINS; ++i) {
@@ -568,26 +594,33 @@ void rqs_inverse_and_ladj_fwd_from_phiV(const VOut& yphi, float y, float& x, flo
         sumH += __expf(vH - maxH);
     }
     const float invSumH = 1.0f / fmaxf(sumH, 1e-20f);
-    const float thrE = v * sumH; // unnormalized threshold
+    const float thrE = v * sumH;
 
-
-    // bin 探索（y方向は cumH）。同時に x方向 cumW も回して x0/x1 を得る
+    // scan
     float cw = 0.0f, chE = 0.0f;
     int k = -1;
-    float x0u=0, x1u=0, y0u=0, y1u=0;
+    float x0u = 0.0f, x1u = 0.0f, y0u = 0.0f, y1u = 0.0f;
 
     #pragma unroll 1
     for (int i = 0; i < NSF_BINS; ++i) {
-        float w_sm = w_exp[i] * invW;
+        const float vW = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
+        const float eW = __expf(vW - maxW);
+        const float w_sm = eW * invSumW;
 
-        float x0t = cw; cw += w_sm; float x1t = cw;
+        const float x0t = cw;
+        cw += w_sm;
+        const float x1t = cw;
+
         const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
-        const float e  = __expf(vH - maxH);
-        float y0E = chE; chE += e; float y1E = chE;
+        const float eH = __expf(vH - maxH);
+        const float y0E = chE;
+        chE += eH;
+        const float y1E = chE;
 
         if (k < 0 && thrE <= y1E) {
-            k = i;
-            x0u = x0t; x1u = x1t;
+            k   = i;
+            x0u = x0t;
+            x1u = x1t;
             y0u = y0E * invSumH;
             y1u = y1E * invSumH;
         }
@@ -759,7 +792,8 @@ struct NSFPhiCache {
     float g;                     // base distribution parameter (HG g)
 };
 
-static __forceinline__ __device__
+// static __forceinline__ __device__
+static __noinline__ __device__
 void buildNSFPhiCache(const LaunchParams& lp, float c0, float c1, float g, NSFPhiCache& cache)
 {
     cache.g = g;
@@ -805,7 +839,7 @@ float flow_sample_t_and_logpdf_phiCached(const NSFPhiCache& cache, float u_base,
     return y; // t
 }
 
-static  __device__
+static  __device__ __noinline__
 float evalPhaseFunctionNF_phiCached(const NSFPhiCache& cache, float cosTheta)
 {
     float mu = clamp(cosTheta, -1.0f + NSF_EPS, 1.0f - NSF_EPS);
@@ -817,7 +851,7 @@ float evalPhaseFunctionNF_phiCached(const NSFPhiCache& cache, float cosTheta)
     return __expf(logp_t) / denom;
 }
 
-static __device__
+static __device__ __noinline__
 PhaseSample samplePhaseFunctionNF_phiCached(const NSFPhiCache& cache,
                                             const float3& woWorld, float u1, float u2)
 {
