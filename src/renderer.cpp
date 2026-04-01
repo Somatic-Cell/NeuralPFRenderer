@@ -2298,25 +2298,36 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
     std::filesystem::path dataDir = exePath.parent_path().parent_path().parent_path().parent_path() / "weights/flow_light.safetensors";
     
     try {
-    m_nsfHyperCheckPoint = NsfHyperCheckpoint::Load(dataDir.string());
-} catch (const std::exception& e) {
-    std::cerr << "NSF load failed: " << e.what() << "\n";
-    throw; // もしくは return;
-}
+    m_nsfHyperCheckPoint = NsfHyperCheckpoint::Load(
+        dataDir.string(),
+        static_cast<int>(LaunchParams::NSF_MAX_TRANSFORMS)
+        );
+    } catch (const std::exception& e) {
+        std::cerr << "NSF load failed: " << e.what() << "\n";
+        throw; // もしくは return;
+    }
     m_nsfTransforms = (uint32_t)m_nsfHyperCheckPoint.transforms();
     m_nsfInputPad   = inputPad;
 
+    constexpr uint32_t kLayerPerTransform   = LaunchParams::NSF_LAYERS_PER_TRANSFORM;
+    constexpr uint32_t kMaxTransforms       = LaunchParams::NSF_MAX_TRANSFORMS;
+
+    if(m_nsfTransforms > kMaxTransforms) {
+        throw std::runtime_error(
+            "NSF checkpoint has more transforms than LaunchParams::NSF_MAX_TRANSFORMS"
+        );
+    }
     // 3 transforms / 3 layers（あなたの NSF hyper MLP 前提）
-    m_nsfWOffsets.assign((size_t)m_nsfTransforms * 2u, 0u);
-    m_nsfBOffsets.assign((size_t)m_nsfTransforms * 2u, 0u);
+    m_nsfWOffsets.assign((size_t)m_nsfTransforms * kLayerPerTransform, 0u);
+    m_nsfBOffsets.assign((size_t)m_nsfTransforms * kLayerPerTransform, 0u);
 
 
     // ----------------------------
     // Pass 1: offsets と total bytes を計算
     // ----------------------------
     uint32_t cur = 0;
-    for(uint32_t t=0; t<m_nsfTransforms; ++t){
-        for(uint32_t l=0; l<3u; ++l){
+    for(uint32_t t=0; t < m_nsfTransforms; ++t){
+        for(uint32_t l=0; l < LaunchParams::NSF_LAYERS_PER_TRANSFORM; ++l){
             // layer0: (64 x 3) を (64 x inputPad) に拡張する
             const auto& H = m_nsfHyperCheckPoint.hyperAt((int)t);
             uint32_t N = 0, K = 0, Kpad = 0;
@@ -2351,10 +2362,10 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
     // ----------------------------
     // Pass 2: 各 layer を Convert + bias copy
     // ----------------------------
-    for(uint32_t t=0; t<m_nsfTransforms; ++t){
+    for(uint32_t t=0; t < m_nsfTransforms; ++t){
         const auto& H = m_nsfHyperCheckPoint.hyperAt((int)t);
 
-        for(uint32_t l=0; l<3u; ++l){
+        for(uint32_t l = 0; l < LaunchParams::NSF_LAYERS_PER_TRANSFORM; ++l){
             // 取り出し（CPU側の生 weight/bias）
             const NsfHyperCheckpoint::LinearFP16* L = nullptr;
             if(l==0) L = &H.l0;
@@ -2493,8 +2504,8 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
         std::cout << "bins: " << P.bins << ", hidden: " << P.hidden << ", context: " << P.context << std::endl;
 
         // 未使用領域をゼロクリア（安全）
-        for(uint32_t t=0; t<LaunchParams::NSF_MAX_TRANSFORMS; ++t){
-            for(uint32_t l=0; l<LaunchParams::NSF_LAYERS_PER_TRANSFORM; ++l){
+        for(uint32_t t=0; t< LaunchParams::NSF_MAX_TRANSFORMS; ++t){
+            for(uint32_t l=0; l < LaunchParams::NSF_LAYERS_PER_TRANSFORM; ++l){
                 P.wOffset[t][l] = 0;
                 P.bOffset[t][l] = 0;
                 P.N[t][l] = 0;
@@ -2503,9 +2514,9 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
         }
 
         // offsets コピー
-        for(uint32_t t=0; t<m_nsfTransforms; ++t){
+        for(uint32_t t=0; t < LaunchParams::NSF_MAX_TRANSFORMS; ++t){
             const auto& H = m_nsfHyperCheckPoint.hyperAt((int)t); 
-            for(uint32_t l=0; l<3u; ++l){
+            for(uint32_t l = 0; l < LaunchParams::NSF_LAYERS_PER_TRANSFORM; ++l){
                 const uint32_t wi = m_nsfWOffsets[idxTL(t,l)];
                 const uint32_t bi = m_nsfBOffsets[idxTL(t,l)];
                 P.wOffset[t][l] = wi;
@@ -2526,15 +2537,23 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
         }
 
         uint32_t maxW = 0, maxB = 0;
-        for (uint32_t t=0; t<m_nsfTransforms; ++t)
-        for (uint32_t l=0; l<3; ++l){
+        for (uint32_t t = 0; t < m_nsfTransforms; ++t)
+        for (uint32_t l = 0; l < LaunchParams::NSF_LAYERS_PER_TRANSFORM; ++l){
             maxW = std::max(maxW, m_nsfWOffsets[idxTL(t,l)]);
             maxB = std::max(maxB, m_nsfBOffsets[idxTL(t,l)]);
         }
         std::cout << "maxWOff=" << maxW << " maxBOff=" << maxB << "\n";
 
-        std::cout << "LP.wOffset[2][2]=" << P.wOffset[2][2]
-            << " LP.bOffset[2][2]=" << P.bOffset[2][2] << "\n";
+        // std::cout << "LP.wOffset[2][2]=" << P.wOffset[2][2]
+        //     << " LP.bOffset[2][2]=" << P.bOffset[2][2] << "\n";
+        if (P.transforms > 0) {
+            const uint32_t tLast = P.transforms - 1;
+            const uint32_t lLast = LaunchParams::NSF_LAYERS_PER_TRANSFORM - 1;
+            std::cout << "LP.wOffset[" << tLast << "][" << lLast << "]="
+                      << P.wOffset[tLast][lLast]
+                      << " LP.bOffset[" << tLast << "][" << lLast << "]="
+                      << P.bOffset[tLast][lLast] << "\n";
+        }
 
         auto base = (uint64_t)m_nsfPackedWeights.getDevicePointer();
         std::cout << "packedBase=" << (void*)base

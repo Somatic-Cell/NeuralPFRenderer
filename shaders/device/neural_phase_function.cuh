@@ -839,13 +839,37 @@ float flow_sample_t_and_logpdf_phiCached(const NSFPhiCache& cache, float u_base,
     return y; // t
 }
 
+static __noinline__ __device__
+void profile_build_phi_cache(
+    const LaunchParams& lp,
+    float c0, float c1, float g,
+    NSFPhiCache& cache)
+{
+    buildNSFPhiCache(lp, c0, c1, g, cache);
+}
+
+static __noinline__ __device__
+float profile_flow_logpdf_cached(
+    const NSFPhiCache& cache, float t)
+{
+    return flow_logpdf_t_phiCached(cache, t);
+}
+
+static __noinline__ __device__
+float profile_flow_sample_cached(
+    const NSFPhiCache& cache, float u_base, float& out_logp_t)
+{
+    return flow_sample_t_and_logpdf_phiCached(cache, u_base, out_logp_t);
+}
+
 static  __device__ __noinline__
 float evalPhaseFunctionNF_phiCached(const NSFPhiCache& cache, float cosTheta)
 {
     float mu = clamp(cosTheta, -1.0f + NSF_EPS, 1.0f - NSF_EPS);
     const float t = atanhf(mu) / NSF_SCALE;
 
-    const float logp_t = flow_logpdf_t_phiCached(cache, t);
+    // const float logp_t = flow_logpdf_t_phiCached(cache, t);
+    const float logp_t = profile_flow_logpdf_cached(cache, t);
 
     const float denom = (2.0f * float(M_PI)) * NSF_SCALE * fmaxf(1.0f - mu * mu, 1e-30f);
     return __expf(logp_t) / denom;
@@ -859,7 +883,8 @@ PhaseSample samplePhaseFunctionNF_phiCached(const NSFPhiCache& cache,
     const float3 wo = normalize(woWorld);
 
     float logp_t;
-    const float t = flow_sample_t_and_logpdf_phiCached(cache, u1, logp_t);
+    // const float t = flow_sample_t_and_logpdf_phiCached(cache, u1, logp_t);
+    const float t = profile_flow_sample_cached(cache, u1, logp_t);
 
     float mu = tanhf(NSF_SCALE * t);
     mu = clamp(mu, -1.0f + NSF_EPS, 1.0f - NSF_EPS);
@@ -996,3 +1021,4 @@ PhaseSample samplePhaseFunctionNF(const LaunchParams& lp,
 
     return ps;
 }
+

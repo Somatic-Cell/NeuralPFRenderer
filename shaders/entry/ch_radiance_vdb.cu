@@ -383,7 +383,8 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
             // const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
             // pdfPhase = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uRenormalized, g), 1e-20f);
             if(!nfCacheBuilt){
-                buildNSFPhiCache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
+                // buildNSFPhiCache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
+                profile_build_phi_cache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
                 nfCacheBuilt = true;
             }
             pdfPhase = fmaxf(evalPhaseFunctionNF_phiCached(nfCache, cosTheta), 1e-20f);
