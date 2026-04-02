@@ -9,17 +9,17 @@
 static constexpr int NSF_T  = 2;    // transforms
 static constexpr int C      = 3;    // context
 static constexpr int H      = 32;   // hidden
-static constexpr int K      = 21;   // bins
-static constexpr int PHI    = 3*K-1; // 62
+static constexpr int K      = 16;   // bins
+static constexpr int PHI    = 2*K-1; // 62
 
 // 実際の CoopVec サイズは padding 後（launchParams.nsf.inputPad や N/K を参照して決める）
 // 典型：inputPad=16, phiPad=96 など
 static constexpr int IN_PAD  = 16;
-static constexpr int PHI_PAD = 64;
+static constexpr int PHI_PAD = 32;
 
 // ---- NSF constants (zuko 1.5.0 defaults unless overridden) ----
-static constexpr int   NSF_BINS  = 21;
-static constexpr int   NSF_PHI   = 3 * NSF_BINS - 1; // 62
+static constexpr int   NSF_BINS  = 16;
+static constexpr int   NSF_PHI   = 2 * NSF_BINS - 1; // 62
 static constexpr float NSF_BOUND = 2.5f;
 static constexpr float NSF_SLOPE = 1e-3f;
 
@@ -181,6 +181,14 @@ void split_phi(const float phi[NSF_PHI], float w[NSF_BINS], float h[NSF_BINS], f
     for (int i = 0; i < NSF_BINS - 1; ++i) d[i] = phi[2 * NSF_BINS + i];
 }
 
+static __forceinline__ __device__
+void split_phi_fixedx(const float phi[NSF_PHI], float h[NSF_BINS], float d[NSF_BINS - 1])
+{
+    for (int i = 0; i < NSF_BINS; ++i) h[i] = phi[i];
+    for (int i = 0; i < NSF_BINS - 1; ++i) d[i] = phi[NSF_BINS + i];
+}
+
+
 struct Rqs1D {
     float xk[NSF_BINS + 1]; // horizontal knots
     float yk[NSF_BINS + 1]; // vertical knots
@@ -269,15 +277,16 @@ static __forceinline__ __device__
 void build_rqs_from_phi(const float phi[NSF_PHI], Rqs1D& rqs,
                         float bound = NSF_BOUND, float slope = NSF_SLOPE)
 {
-    float w_raw[NSF_BINS], h_raw[NSF_BINS], d_raw[NSF_BINS - 1];
-    split_phi(phi, w_raw, h_raw, d_raw);
+    float h_raw[NSF_BINS], d_raw[NSF_BINS - 1];
+    // split_phi(phi, w_raw, h_raw, d_raw);
+    split_phi_fixedx(phi, h_raw, d_raw);
 
     const float log_slope = __logf(slope); // < 0
 
     // saturation
     // #pragma unroll 1
     for (int i = 0; i < NSF_BINS; ++i) {
-        w_raw[i] = saturate_param(w_raw[i], log_slope, 2.0f);
+        // w_raw[i] = saturate_param(w_raw[i], log_slope, 2.0f);
         h_raw[i] = saturate_param(h_raw[i], log_slope, 2.0f);
     }
     // #pragma unroll 1
@@ -286,12 +295,12 @@ void build_rqs_from_phi(const float phi[NSF_PHI], Rqs1D& rqs,
     }
 
     // widths/heights: softmax then pad left with 0, then cumsum, then scale to [-B,B]
-    float w_sm[NSF_BINS], h_sm[NSF_BINS];
-    softmax_32(w_raw, w_sm);
+    float h_sm[NSF_BINS];
+    // softmax_32(w_raw, w_sm);
     softmax_32(h_raw, h_sm);
 
     // cumulative with pad(1,0) value=0:
-    float cw = 0.0f;
+    // float cw = 0.0f;
     float ch = 0.0f;
 
     // i=0 is padded 0 -> cumsum(0)=0
@@ -300,9 +309,9 @@ void build_rqs_from_phi(const float phi[NSF_PHI], Rqs1D& rqs,
 
     // #pragma unroll 1
     for (int i = 1; i <= NSF_BINS; ++i) {
-        cw += w_sm[i - 1];
+        // cw += w_sm[i - 1];
         ch += h_sm[i - 1];
-        rqs.xk[i] = bound * (2.0f * cw - 1.0f);
+        rqs.xk[i] = -bound + (2.0f * bound) * (float(i) / float(NSF_BINS));
         rqs.yk[i] = bound * (2.0f * ch - 1.0f);
     }
     // 理論上 rqs.xk[NSF_BINS]=+B, rqs.yk[NSF_BINS]=+B
@@ -321,7 +330,8 @@ float dk_from_phi(const VOut& y, int knot, float log_slope)
 {
     if (knot <= 0 || knot >= NSF_BINS) return 1.0f; // pad(1,1) exp(0)
     // d_raw index: 2*NSF_BINS + (knot-1)  (knot=1..31)
-    float d_raw = saturate_param(phi_f(y, 2 * NSF_BINS + (knot - 1)), log_slope, 1.0f);
+    // float d_raw = saturate_param(phi_f(y, 2 * NSF_BINS + (knot - 1)), log_slope, 1.0f);
+    float d_raw = saturate_param(phi_f(y, NSF_BINS + (knot - 1)), log_slope, 1.0f);
     return __expf(d_raw);
 }
 
@@ -372,42 +382,51 @@ void rqs_forward_and_ladj_from_phiV(const VOut& yphi, float x, float& y, float& 
 {
 #if NSF_RQS_VARIANT == 1
 
-    const float log_slope = __logf(slope);
+    // const float log_slope = __logf(slope);
 
-    // x を [0,1] に正規化（xk[i] = bound*(2*cw - 1) に対応）
+    // // x を [0,1] に正規化（xk[i] = bound*(2*cw - 1) に対応）
+    // float u = (x / bound + 1.0f) * 0.5f;
+    // if (!(u > 0.0f && u < 1.0f)) { y = x; ladj = 0.0f; return; }
+
+    // float maxW, invSumW;
+    // width_softmax_stats_from_phi(yphi, log_slope, maxW, invSumW);
+
+    // float cw = 0.0f;
+    // int k = -1;
+    // float x0u = 0.0f, x1u = 0.0f;
+
+    // #pragma unroll 1
+    // for (int i = 0; i < NSF_BINS; ++i) {
+    //     const float vW = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
+    //     const float eW = __expf(vW - maxW);
+    //     const float w_sm = eW * invSumW;
+
+    //     const float x0 = cw;
+    //     cw += w_sm;
+    //     const float x1 = cw;
+
+    //     if (k < 0 && u <= x1) {
+    //         k = i;
+    //         x0u = x0;
+    //         x1u = x1;
+    //     }
+    // }
+    // if (k < 0 || k >= NSF_BINS) { y = x; ladj = 0.0f; return; }
+    const float log_slope = __logf(slope);
     float u = (x / bound + 1.0f) * 0.5f;
     if (!(u > 0.0f && u < 1.0f)) { y = x; ladj = 0.0f; return; }
 
-    float maxW, invSumW;
-width_softmax_stats_from_phi(yphi, log_slope, maxW, invSumW);
 
-    float cw = 0.0f;
-    int k = -1;
-    float x0u = 0.0f, x1u = 0.0f;
-
-    #pragma unroll 1
-    for (int i = 0; i < NSF_BINS; ++i) {
-        const float vW = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
-        const float eW = __expf(vW - maxW);
-        const float w_sm = eW * invSumW;
-
-        const float x0 = cw;
-        cw += w_sm;
-        const float x1 = cw;
-
-        if (k < 0 && u <= x1) {
-            k = i;
-            x0u = x0;
-            x1u = x1;
-        }
-    }
-    if (k < 0 || k >= NSF_BINS) { y = x; ladj = 0.0f; return; }
-
+    int k = min(int(u * NSF_BINS), NSF_BINS - 1);
+    const float x0u = float(k) / float(NSF_BINS);
+    const float x1u = float(k + 1) / float(NSF_BINS);
+    
     // ---- HLESS: y0u/y1u だけを高さsoftmaxから求める（h_exp配列なし） ----
     float maxH = -1e30f;
     #pragma unroll 4
     for (int i = 0; i < NSF_BINS; ++i) {
-        const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        // const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        const float vH = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
         maxH = fmaxf(maxH, vH);
     }
 
@@ -576,42 +595,47 @@ void rqs_inverse_and_ladj_fwd_from_phiV(const VOut& yphi, float y, float& x, flo
     float v = (y / bound + 1.0f) * 0.5f;
     if (!(v > 0.0f && v < 1.0f)) { x = y; ladj_fwd = 0.0f; return; }
 
-    float maxW, invSumW;
-    width_softmax_stats_from_phi(yphi, log_slope, maxW, invSumW);
+    // float maxW, invSumW;
+    // width_softmax_stats_from_phi(yphi, log_slope, maxW, invSumW);
 
     // 既存どおり HLESS のための maxH / sumH を計算
     float maxH = -1e30f;
     #pragma unroll 4
     for (int i = 0; i < NSF_BINS; ++i) {
-        const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        // const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        const float vH = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
         maxH = fmaxf(maxH, vH);
     }
 
     float sumH = 0.0f;
     #pragma unroll 4
     for (int i = 0; i < NSF_BINS; ++i) {
-        const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        // const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        const float vH = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
         sumH += __expf(vH - maxH);
     }
     const float invSumH = 1.0f / fmaxf(sumH, 1e-20f);
     const float thrE = v * sumH;
 
     // scan
-    float cw = 0.0f, chE = 0.0f;
+    // float cw = 0.0f, chE = 0.0f;
+    float chE = 0.0f;
     int k = -1;
-    float x0u = 0.0f, x1u = 0.0f, y0u = 0.0f, y1u = 0.0f;
+    // float x0u = 0.0f, x1u = 0.0f, y0u = 0.0f, y1u = 0.0f;
+    float y0u = 0.0f, y1u = 0.0f;
 
     #pragma unroll 1
     for (int i = 0; i < NSF_BINS; ++i) {
-        const float vW = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
-        const float eW = __expf(vW - maxW);
-        const float w_sm = eW * invSumW;
+        // const float vW = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
+        // const float eW = __expf(vW - maxW);
+        // const float w_sm = eW * invSumW;
 
-        const float x0t = cw;
-        cw += w_sm;
-        const float x1t = cw;
+        // const float x0t = cw;
+        // cw += w_sm;
+        // const float x1t = cw;
 
-        const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        // const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        const float vH = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
         const float eH = __expf(vH - maxH);
         const float y0E = chE;
         chE += eH;
@@ -619,14 +643,16 @@ void rqs_inverse_and_ladj_fwd_from_phiV(const VOut& yphi, float y, float& x, flo
 
         if (k < 0 && thrE <= y1E) {
             k   = i;
-            x0u = x0t;
-            x1u = x1t;
+            // x0u = x0t;
+            // x1u = x1t;
             y0u = y0E * invSumH;
             y1u = y1E * invSumH;
         }
     }
     if (k < 0 || k >= NSF_BINS) { x = y; ladj_fwd = 0.0f; return; }
 
+    const float x0u = float(k) / float(NSF_BINS);
+    const float x1u = float(k + 1) / float(NSF_BINS);
     const float x0 = bound * (2.0f * x0u - 1.0f);
     const float x1 = bound * (2.0f * x1u - 1.0f);
     const float y0 = bound * (2.0f * y0u - 1.0f);

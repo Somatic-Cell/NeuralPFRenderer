@@ -61,8 +61,8 @@ public:
     int transforms() const { return transforms_; }
     int bins() const { return bins_; }       // K
     int context() const { return context_; } // 3
-    int hidden() const { return hidden_; }   // 64
-    int spline_out_dim() const { return spline_out_dim_; } // 3K-1 (=95)
+    int hidden() const { return hidden_; }   // 32
+    int spline_out_dim() const { return spline_out_dim_; } // fixed-x : 2K -1
 
     const HyperMLP& hyperAt(int t) const { return hyper_.at(static_cast<std::size_t>(t)); }
     HyperMLP& hyperAt(int t) { return hyper_.at(static_cast<std::size_t>(t)); }
@@ -178,12 +178,12 @@ private:
         hidden_  = hyper_[0].l0.out;
         context_ = hyper_[0].l0.in;
 
-        // l2.out = 3K - 1 から K を逆算
+        // l2.out = 2K - 1 から K を逆算
         spline_out_dim_ = hyper_[0].l2.out;
-        if ((spline_out_dim_ + 1) % 3 != 0) {
-            throw std::runtime_error("Cannot infer bins: l2.out is not (3K-1). out=" + std::to_string(spline_out_dim_));
+        if ((spline_out_dim_ + 1) % 2 != 0) {
+            throw std::runtime_error("Cannot infer bins: l2.out is not (2K-1). out=" + std::to_string(spline_out_dim_));
         }
-        bins_ = (spline_out_dim_ + 1) / 3;
+        bins_ = (spline_out_dim_ + 1) / 2;
 
         // Sanity check：全 transform で一致
         for (int t = 0; t < transforms_; ++t) {

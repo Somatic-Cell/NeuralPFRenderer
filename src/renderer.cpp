@@ -2295,7 +2295,7 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
         std::cerr << "ERROR: readlink() failed" << std::endl;
     }
 #endif
-    std::filesystem::path dataDir = exePath.parent_path().parent_path().parent_path().parent_path() / "weights/flow_light.safetensors";
+    std::filesystem::path dataDir = exePath.parent_path().parent_path().parent_path().parent_path() / "weights/flow_flexible.safetensors";
     
     try {
     m_nsfHyperCheckPoint = NsfHyperCheckpoint::Load(
@@ -2500,6 +2500,7 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
         P.bins    = (uint32_t)m_nsfHyperCheckPoint.bins();
         P.hidden  = (uint32_t)m_nsfHyperCheckPoint.hidden();
         P.context = (uint32_t)m_nsfHyperCheckPoint.context();
+        P.phiDim  = (uint32_t)m_nsfHyperCheckPoint.spline_out_dim();
 
         std::cout << "bins: " << P.bins << ", hidden: " << P.hidden << ", context: " << P.context << std::endl;
 

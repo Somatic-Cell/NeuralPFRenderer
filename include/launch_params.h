@@ -281,6 +281,7 @@ struct alignas(16) LaunchParams {
         uint32_t    bins;         // e.g. 32 (optional but useful)
         uint32_t    hidden;       // e.g. 64 (optional)
         uint32_t    context;      // e.g. 3  (optional)
+        uint32_t    phiDim;       // e.g. 31 (optional)
 
         // offsets in bytes from packedBase
         alignas(16) uint32_t wOffset[NSF_MAX_TRANSFORMS][NSF_LAYERS_PER_TRANSFORM];
