@@ -43,8 +43,8 @@ VHid relu(const VHid& x)
     return optixCoopVecMax(x, half(0.0f)); // あなたの OptiX ヘッダの名前に合わせてください
 }
 
-static __forceinline__ __device__
-// static __noinline__ __device__
+// static __forceinline__ __device__
+static __noinline__ __device__
 VHid evalHyperLayer0(const LaunchParams& lp, int t, const VIn& in)
 {
     const CUdeviceptr base = lp.nsf.packedBase;
@@ -64,8 +64,8 @@ VHid evalHyperLayer0(const LaunchParams& lp, int t, const VIn& in)
     return out;
 }
 
-static __forceinline__ __device__
-// static __noinline__ __device__
+// static __forceinline__ __device__
+static __noinline__ __device__
 VHid evalHyperLayer1(const LaunchParams& lp, int t, const VHid& in)
 {
     const CUdeviceptr base = lp.nsf.packedBase;
@@ -85,8 +85,8 @@ VHid evalHyperLayer1(const LaunchParams& lp, int t, const VHid& in)
     return out;
 }
 
-static __forceinline__ __device__
-// static __noinline__ __device__
+// static __forceinline__ __device__
+static __noinline__ __device__
 VOut evalHyperLayer2(const LaunchParams& lp, int t, const VHid& in)
 {
     const CUdeviceptr base = lp.nsf.packedBase;
@@ -420,7 +420,7 @@ void rqs_forward_and_ladj_from_phiV(const VOut& yphi, float x, float& y, float& 
     int k = min(int(u * NSF_BINS), NSF_BINS - 1);
     const float x0u = float(k) / float(NSF_BINS);
     const float x1u = float(k + 1) / float(NSF_BINS);
-    
+
     // ---- HLESS: y0u/y1u だけを高さsoftmaxから求める（h_exp配列なし） ----
     float maxH = -1e30f;
     #pragma unroll 4
@@ -435,7 +435,8 @@ void rqs_forward_and_ladj_from_phiV(const VOut& yphi, float x, float& y, float& 
     float pre = 0.0f;
     #pragma unroll 4
     for (int i = 0; i < NSF_BINS; ++i) {
-        const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        // const float vH = saturate_param(phi_f(yphi, NSF_BINS + i), log_slope, 2.0f);
+        const float vH = saturate_param(phi_f(yphi, i), log_slope, 2.0f);
         const float e  = __expf(vH - maxH);
         sumH += e;
         if (i == k) {
@@ -933,6 +934,264 @@ PhaseSample samplePhaseFunctionNF_phiCached(const NSFPhiCache& cache,
     return ps;
 }
 
+// ----------------------------------------------------------------------------
+// RQS Cached
+// ----------------------------------------------------------------------------
+
+struct NSFFixedXRqsCache {
+    alignas(16) float yk[NSF_T][NSF_BINS + 1];
+    alignas(16) float dk[NSF_T][NSF_BINS + 1];
+    float g;
+};
+
+static __noinline__ __device__
+void buildNSFFixedXRqsCache(const LaunchParams& lp,
+                            float c0, float c1, float g,
+                            NSFFixedXRqsCache& cache)
+{
+    cache.g = g;
+    const float log_slope = __logf(NSF_SLOPE);
+
+    #pragma unroll
+    for (int t = 0; t < NSF_T; ++t) {
+        VOut phi;
+        evalHyperMLP_phi62_vec(lp, t, c0, c1, g, phi);
+
+        // ---- h の online softmax 統計を 1-pass で取る ----
+        float m = -CUDART_INF_F;
+        float s = 0.0f;
+
+        #pragma unroll
+        for (int i = 0; i < NSF_BINS; ++i) {
+            const float a = saturate_param(phi_f(phi, i), log_slope, 2.0f);
+
+            const float m_new = fmaxf(m, a);
+            s = s * __expf(m - m_new) + __expf(a - m_new);
+            m = m_new;
+        }
+
+        const float invS = 1.0f / fmaxf(s, 1e-20f);
+
+        // ---- yk を prefix で直接構築 ----
+        cache.yk[t][0] = -NSF_BOUND;
+        float ch = 0.0f;
+
+        #pragma unroll
+        for (int i = 1; i <= NSF_BINS; ++i) {
+            const float a = saturate_param(phi_f(phi, i - 1), log_slope, 2.0f);
+            ch += __expf(a - m) * invS;
+            cache.yk[t][i] = NSF_BOUND * (2.0f * ch - 1.0f);
+        }
+
+        // ---- dk はそのまま直書き ----
+        cache.dk[t][0] = 1.0f;
+
+        #pragma unroll
+        for (int i = 1; i < NSF_BINS; ++i) {
+            const float a = saturate_param(phi_f(phi, NSF_BINS + (i - 1)), log_slope, 1.0f);
+            cache.dk[t][i] = __expf(a);
+        }
+
+        cache.dk[t][NSF_BINS] = 1.0f;
+    }
+}
+
+static __forceinline__ __device__
+void fixedx_rqs_forward_bin(float x, float x0, float x1,
+                            float y0, float y1,
+                            float d0, float d1,
+                            float& y, float& ladj)
+{
+    const float w = x1 - x0;
+    const float h = y1 - y0;
+    const float s = h / fmaxf(w, 1e-20f);
+
+    const float theta = (x - x0) / fmaxf(w, 1e-20f);
+    const float omt   = 1.0f - theta;
+
+    const float a = s * theta * theta + d0 * theta * omt;
+    const float b = s + (d0 + d1 - 2.0f * s) * theta * omt;
+    const float z = a / fmaxf(b, 1e-20f);
+
+    y = y0 + h * z;
+
+    const float num = s * s * (d1 * theta * theta + 2.0f * s * theta * omt + d0 * omt * omt);
+    const float den = b * b;
+    const float dydx = num / fmaxf(den, 1e-20f);
+    ladj = __logf(fmaxf(dydx, 1e-20f));
+}
+
+static __forceinline__ __device__
+void fixedx_rqs_forward_cached(const float yk[NSF_BINS + 1],
+                               const float dk[NSF_BINS + 1],
+                               float x, float& y, float& ladj)
+{
+    float u = (x / NSF_BOUND + 1.0f) * 0.5f;
+    if (!(u > 0.0f && u < 1.0f)) {
+        y = x;
+        ladj = 0.0f;
+        return;
+    }
+
+    const int k = min(int(u * NSF_BINS), NSF_BINS - 1);
+
+    const float x0 = -NSF_BOUND + (2.0f * NSF_BOUND) * (float(k) / float(NSF_BINS));
+    const float x1 = -NSF_BOUND + (2.0f * NSF_BOUND) * (float(k + 1) / float(NSF_BINS));
+
+    fixedx_rqs_forward_bin(x, x0, x1,
+                           yk[k], yk[k + 1],
+                           dk[k], dk[k + 1],
+                           y, ladj);
+}
+
+
+static __forceinline__ __device__
+float flow_logpdf_t_rqsCached(const NSFFixedXRqsCache& cache, float t)
+{
+    float x = t;
+    float sum_ladj_fwd = 0.0f;
+
+    #pragma unroll
+    for (int i = 0; i < NSF_T; ++i) {
+        float y, ladj_fwd;
+        fixedx_rqs_forward_cached(cache.yk[i], cache.dk[i], x, y, ladj_fwd);
+        sum_ladj_fwd += ladj_fwd;
+        x = y;
+    }
+
+    return logpdfBaseT(x, cache.g) + sum_ladj_fwd;
+}
+
+static __forceinline__ __device__
+void fixedx_rqs_inverse_bin(float y, float x0, float x1,
+                            float y0, float y1,
+                            float d0, float d1,
+                            float& x, float& ladj_fwd)
+{
+    const float w = x1 - x0;
+    const float h = y1 - y0;
+    const float s = h / fmaxf(w, 1e-20f);
+
+    const float yy = y - y0;
+
+    const float A = h * (s - d0) + yy * (d0 + d1 - 2.0f * s);
+    const float B = h * d0 - yy * (d0 + d1 - 2.0f * s);
+    const float C = -s * yy;
+
+    const float disc = fmaxf(B * B - 4.0f * A * C, 0.0f);
+    const float sqrt_disc = sqrtf(disc);
+
+    float theta;
+    if (fabsf(A) < 1e-20f) {
+        theta = -C / fmaxf(B, 1e-20f);
+    } else {
+        theta = (2.0f * C) / fmaxf(-B - sqrt_disc, 1e-20f);
+    }
+    theta = fminf(fmaxf(theta, 0.0f), 1.0f);
+
+    x = x0 + w * theta;
+
+    const float omt = 1.0f - theta;
+    const float den = s + (d0 + d1 - 2.0f * s) * theta * omt;
+    const float num = s * s * (d1 * theta * theta + 2.0f * s * theta * omt + d0 * omt * omt);
+    const float dydx = num / fmaxf(den * den, 1e-20f);
+    ladj_fwd = __logf(fmaxf(dydx, 1e-20f));
+}
+
+static __forceinline__ __device__
+void fixedx_rqs_inverse_cached(const float yk[NSF_BINS + 1],
+                               const float dk[NSF_BINS + 1],
+                               float y, float& x, float& ladj_fwd)
+{
+    float v = (y / NSF_BOUND + 1.0f) * 0.5f;
+    if (!(v > 0.0f && v < 1.0f)) {
+        x = y;
+        ladj_fwd = 0.0f;
+        return;
+    }
+
+    int k = -1;
+    #pragma unroll
+    for (int i = 0; i < NSF_BINS; ++i) {
+        if (k < 0 && y <= yk[i + 1]) {
+            k = i;
+        }
+    }
+    if (k < 0) {
+        x = y;
+        ladj_fwd = 0.0f;
+        return;
+    }
+
+    const float x0 = -NSF_BOUND + (2.0f * NSF_BOUND) * (float(k) / float(NSF_BINS));
+    const float x1 = -NSF_BOUND + (2.0f * NSF_BOUND) * (float(k + 1) / float(NSF_BINS));
+
+    fixedx_rqs_inverse_bin(y, x0, x1,
+                           yk[k], yk[k + 1],
+                           dk[k], dk[k + 1],
+                           x, ladj_fwd);
+}
+
+static __forceinline__ __device__
+float flow_sample_t_and_logpdf_rqsCached(const NSFFixedXRqsCache& cache,
+                                         float u_base, float& out_logp_t)
+{
+    float y = sampleBaseT(u_base, cache.g);
+    float logp = logpdfBaseT(y, cache.g);
+
+    #pragma unroll
+    for (int i = NSF_T - 1; i >= 0; --i) {
+        float x, ladj_fwd;
+        fixedx_rqs_inverse_cached(cache.yk[i], cache.dk[i], y, x, ladj_fwd);
+        logp += ladj_fwd;
+        y = x;
+    }
+
+    out_logp_t = logp;
+    return y;
+}
+
+static __forceinline__ __device__
+float evalPhaseFunctionNF_rqsCached(const NSFFixedXRqsCache& cache, float cosTheta)
+{
+    float mu = fminf(fmaxf(cosTheta, -1.0f + NSF_EPS), 1.0f - NSF_EPS);
+    float t = atanhf(mu) / NSF_SCALE;
+    float logp_t = flow_logpdf_t_rqsCached(cache, t);
+
+    float denom = (2.0f * float(M_PI)) * NSF_SCALE * fmaxf(1.0f - mu * mu, 1e-30f);
+    return __expf(logp_t) / denom;
+}
+
+static __forceinline__ __device__
+PhaseSample samplePhaseFunctionNF_rqsCached(const NSFFixedXRqsCache& cache,
+                                            const float3& woWorld,
+                                            float u1, float u2)
+{
+    PhaseSample ps;
+    const float3 wo = normalize(woWorld);
+
+    float logp_t;
+    float t = flow_sample_t_and_logpdf_rqsCached(cache, u1, logp_t);
+
+    float mu = tanhf(NSF_SCALE * t);
+    mu = fminf(fmaxf(mu, -1.0f + NSF_EPS), 1.0f - NSF_EPS);
+
+    float sinTheta = sqrtf(fmaxf(0.0f, 1.0f - mu * mu));
+    float phi = 2.0f * float(M_PI) * u2;
+
+    float sinPhi, cosPhi;
+    sincosf(phi, &sinPhi, &cosPhi);
+
+    float3 tvec, bvec;
+    makeONB(wo, tvec, bvec);
+
+    float3 local = make_float3(cosPhi * sinTheta, sinPhi * sinTheta, mu);
+    ps.wi = normalize(local.x * tvec + local.y * bvec + local.z * wo);
+
+    float denom = (2.0f * float(M_PI)) * NSF_SCALE * fmaxf(1.0f - mu * mu, 1e-30f);
+    ps.pdf = __expf(logp_t) / denom;
+    return ps;
+}
 
 
 static __device__

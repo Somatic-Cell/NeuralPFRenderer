@@ -239,6 +239,7 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
     const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
     const float uHeroNormalized     = uWavelength * 2.0f - 1.0f;
     NSFPhiCache nfCache;
+    // NSFFixedXRqsCache nfCache;
     bool nfCacheBuilt = false;
 #endif
 // #if defined(PHASE_FUNCTION_TABULATED)
@@ -288,6 +289,26 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
 
         return;
     }
+
+    #if !defined(PHASE_FUNCTION_TABULATED) && !defined(PHASE_FUNCTION_HG)
+        // gHero = tex2D<float>(optixLaunchParams.mieTexture.phaseParameterG, uHero, uDiameter);
+        // uDiameterNormalized = uDiameter * 2.0f - 1.0f;
+        // uHeroNormalized     = uHero * 2.0f - 1.0f;
+        profile_build_phi_cache(
+            optixLaunchParams,
+            uDiameterNormalized,
+            uHeroNormalized,
+            gHero,
+            nfCache
+        );
+        nfCacheBuilt = true;
+        // buildNSFFixedXRqsCache(optixLaunchParams,
+        //                    /* c0 */ uDiameterNormalized,
+        //                    /* c1 */ uHeroNormalized,
+        //                    gHero,
+        //                    nfCache);
+        // nfCacheBuilt = true;
+    #endif
 
     // 散乱する位置
     const float3 scatteredPointObject = rayOriginObject + tScatter * rayDirectionObject;
@@ -382,12 +403,13 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
             // const float uRenormalized = 2.0f * uNormalized - 1.0f;
             // const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
             // pdfPhase = fmaxf(evalPhaseFunctionNF(optixLaunchParams, cosTheta, uDiameterNormalized, uRenormalized, g), 1e-20f);
-            if(!nfCacheBuilt){
-                // buildNSFPhiCache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
-                profile_build_phi_cache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
-                nfCacheBuilt = true;
-            }
+            // if(!nfCacheBuilt){
+            //     // buildNSFPhiCache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
+            //     profile_build_phi_cache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
+            //     nfCacheBuilt = true;
+            // }
             pdfPhase = fmaxf(evalPhaseFunctionNF_phiCached(nfCache, cosTheta), 1e-20f);
+            // pdfPhase = fmaxf(evalPhaseFunctionNF_rqsCached(nfCache, cosTheta), 1e-20f);
 #endif
 
             // const float phaseValue  = phasePdf;
@@ -438,11 +460,12 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
     // const float uDiameterNormalized = uDiameter * 2.0f - 1.0f;
     // const float uHeroNormalized = uHero * 2.0f - 1.0f;
     // PhaseSample ps = samplePhaseFunctionNF(optixLaunchParams, rayDirectionWorld, prd.random(), prd.random(), uDiameterNormalized, uHeroNormalized, gHero);
-    if(!nfCacheBuilt){
-        buildNSFPhiCache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
-        nfCacheBuilt = true;
-    }
+    // if(!nfCacheBuilt){
+    //     buildNSFPhiCache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
+    //     nfCacheBuilt = true;
+    // }
     PhaseSample ps = samplePhaseFunctionNF_phiCached(nfCache, rayDirectionWorld, prd.random(), prd.random());
+    // PhaseSample ps = samplePhaseFunctionNF_rqsCached(nfCache, rayDirectionWorld, prd.random(), prd.random());
 #endif
 
     prd.wi = ps.wi;
