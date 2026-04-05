@@ -2336,7 +2336,7 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
             if(l==2){ N = (uint32_t)H.l2.out; K = (uint32_t)H.l2.in;  Kpad = K; }
 
             uint32_t Npack = N;
-            if(l == 2) Npack = 64;
+            if(l == 2) Npack = 32;
 
             std::cout << "[" << l << "] N:" << N << ", Npack" << Npack << ", K: " << K << ", Kpad: " << Kpad << std::endl;
 
@@ -2376,7 +2376,7 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
             const uint32_t Kpad = (l==0) ? inputPad : K;
 
             uint32_t Npack = N;
-            if(l == 2) Npack = 64;
+            if(l == 2) Npack = 32;
             std::vector<uint16_t> Wnxkpad;
             if(l == 2){
                 Wnxkpad.assign((size_t)Npack * (size_t)Kpad, uint16_t(0)); // 96x64
@@ -2530,7 +2530,7 @@ void Renderer::buildNsfPackedWeightsCoopVec(uint32_t inputPad)
                 const uint32_t Kpad = (l==0)? m_nsfInputPad : K;
 
                 uint32_t Npack = N;
-                if(l == 2) Npack = 64;
+                if(l == 2) Npack = 32;
                 
                 P.N[t][l] = (uint16_t)Npack;
                 P.K[t][l] = (uint16_t)Kpad;
