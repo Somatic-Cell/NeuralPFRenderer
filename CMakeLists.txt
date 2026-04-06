@@ -222,6 +222,9 @@ set(
     ${PROJECT_SOURCE_DIR}/shaders/device/phase_function.cuh
     ${PROJECT_SOURCE_DIR}/shaders/device/neural_phase_function.cuh
     ${PROJECT_SOURCE_DIR}/shaders/device/atmosphere_sampling_device.cuh
+    ${PROJECT_SOURCE_DIR}/shaders/device/nsf_simd_constant_flow_flexible_data.cuh
+    ${PROJECT_SOURCE_DIR}/shaders/device/nsf_simd_constantbackend.cuh
+    ${PROJECT_SOURCE_DIR}/shaders/device/atmosphere_sampling_device.cuh
     ${PROJECT_SOURCE_DIR}/shaders/config.cuh
 )
 

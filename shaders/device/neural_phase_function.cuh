@@ -30,106 +30,122 @@ static constexpr float NSF_EPS   = 1e-6f;  // clamp
 #define NSF_RQS_VARIANT 1
 #endif
 
-// 型は状況に応じて（half/float）
-// まずは matmul は half のまま、後段の RQS は float に落とすのが無難です
-using VIn   = OptixCoopVec<half, IN_PAD>;
-using VHid  = OptixCoopVec<half, H>;
-using VOut  = OptixCoopVec<half, PHI_PAD>;
-
-static __forceinline__ __device__
-VHid relu(const VHid& x)
-{
-    // ReLU: max(x, 0)
-    return optixCoopVecMax(x, half(0.0f)); // あなたの OptiX ヘッダの名前に合わせてください
-}
+// // 型は状況に応じて（half/float）
+// // まずは matmul は half のまま、後段の RQS は float に落とすのが無難です
+// using VIn   = OptixCoopVec<half, IN_PAD>;
+// using VHid  = OptixCoopVec<half, H>;
+// using VOut  = OptixCoopVec<half, PHI_PAD>;
 
 // static __forceinline__ __device__
-static __noinline__ __device__
-VHid evalHyperLayer0(const LaunchParams& lp, int t, const VIn& in)
-{
-    const CUdeviceptr base = lp.nsf.packedBase;
-    const uint32_t wOff = lp.nsf.wOffset[t][0];
-    const uint32_t bOff = lp.nsf.bOffset[t][0];
-
-    VHid out;
-    out = optixCoopVecMatMul<
-        VHid, VIn,
-        OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
-        OPTIX_COOP_VEC_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
-        false,
-        H, IN_PAD,
-        OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16, OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16
-    >(in, base, wOff, base, bOff);
-
-    return out;
-}
-
-// static __forceinline__ __device__
-static __noinline__ __device__
-VHid evalHyperLayer1(const LaunchParams& lp, int t, const VHid& in)
-{
-    const CUdeviceptr base = lp.nsf.packedBase;
-    const uint32_t wOff = lp.nsf.wOffset[t][1];
-    const uint32_t bOff = lp.nsf.bOffset[t][1];
-
-    VHid out;
-    out = optixCoopVecMatMul<
-        VHid, VHid,
-        OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
-        OPTIX_COOP_VEC_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
-        false,
-        H, H,
-        OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16, OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16
-    >(in, base, wOff, base, bOff);
-
-    return out;
-}
-
-// static __forceinline__ __device__
-static __noinline__ __device__
-VOut evalHyperLayer2(const LaunchParams& lp, int t, const VHid& in)
-{
-    const CUdeviceptr base = lp.nsf.packedBase;
-    const uint32_t wOff = lp.nsf.wOffset[t][2];
-    const uint32_t bOff = lp.nsf.bOffset[t][2];
-
-    VOut out;
-    out = optixCoopVecMatMul<
-        VOut, VHid,
-        OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
-        OPTIX_COOP_VEC_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
-        false,
-        PHI_PAD, H,
-        OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16, OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16
-    >(in, base, wOff, base, bOff);
-
-    return out;
-}
-
-// static __forceinline__ __device__
-// void evalHyperMLP_phi95(const LaunchParams& lp, int t, const float c0, const float c1, const float c2,
-//                         float phi_out[PHI])
+// VHid relu(const VHid& x)
 // {
-//     // 入力パディング
-//     alignas(16) VIn x(half(0.0f));
-//     x[0] = __float2half(c0);
-//     x[1] = __float2half(c1);
-//     x[2] = __float2half(c2);
-
-//     // 3->64->64->phiPad
-//     alignas(16) VHid h0 = relu(evalHyperLayer0(lp, t, x));
-//     alignas(16) VHid h1 = relu(evalHyperLayer1(lp, t, h0));
-//     alignas(16) VOut y  = evalHyperLayer2(lp, t, h1);
-
-//     // 必要な 95 次元だけ float に取り出す
-//     #pragma unroll 1
-//     for (int i = 0; i < PHI; ++i)
-//         phi_out[i] = __half2float(y[i]);
+//     // ReLU: max(x, 0)
+//     return optixCoopVecMax(x, half(0.0f)); // あなたの OptiX ヘッダの名前に合わせてください
 // }
 
+// // static __forceinline__ __device__
+// static __noinline__ __device__
+// VHid evalHyperLayer0(const LaunchParams& lp, int t, const VIn& in)
+// {
+//     const CUdeviceptr base = lp.nsf.packedBase;
+//     const uint32_t wOff = lp.nsf.wOffset[t][0];
+//     const uint32_t bOff = lp.nsf.bOffset[t][0];
 
-// static __forceinline__ __device__
-// void evalHyperMLP_phi95_vec(const LaunchParams& lp, int t,
+//     VHid out;
+//     out = optixCoopVecMatMul<
+//         VHid, VIn,
+//         OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
+//         OPTIX_COOP_VEC_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
+//         false,
+//         H, IN_PAD,
+//         OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16, OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16
+//     >(in, base, wOff, base, bOff);
+
+//     return out;
+// }
+
+// // static __forceinline__ __device__
+// static __noinline__ __device__
+// VHid evalHyperLayer1(const LaunchParams& lp, int t, const VHid& in)
+// {
+//     const CUdeviceptr base = lp.nsf.packedBase;
+//     const uint32_t wOff = lp.nsf.wOffset[t][1];
+//     const uint32_t bOff = lp.nsf.bOffset[t][1];
+
+//     VHid out;
+//     out = optixCoopVecMatMul<
+//         VHid, VHid,
+//         OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
+//         OPTIX_COOP_VEC_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
+//         false,
+//         H, H,
+//         OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16, OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16
+//     >(in, base, wOff, base, bOff);
+
+//     return out;
+// }
+
+// // static __forceinline__ __device__
+// static __noinline__ __device__
+// VOut evalHyperLayer2(const LaunchParams& lp, int t, const VHid& in)
+// {
+//     const CUdeviceptr base = lp.nsf.packedBase;
+//     const uint32_t wOff = lp.nsf.wOffset[t][2];
+//     const uint32_t bOff = lp.nsf.bOffset[t][2];
+
+//     VOut out;
+//     out = optixCoopVecMatMul<
+//         VOut, VHid,
+//         OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16,
+//         OPTIX_COOP_VEC_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
+//         false,
+//         PHI_PAD, H,
+//         OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16, OPTIX_COOP_VEC_ELEM_TYPE_FLOAT16
+//     >(in, base, wOff, base, bOff);
+
+//     return out;
+// }
+
+// // static __forceinline__ __device__
+// // void evalHyperMLP_phi95(const LaunchParams& lp, int t, const float c0, const float c1, const float c2,
+// //                         float phi_out[PHI])
+// // {
+// //     // 入力パディング
+// //     alignas(16) VIn x(half(0.0f));
+// //     x[0] = __float2half(c0);
+// //     x[1] = __float2half(c1);
+// //     x[2] = __float2half(c2);
+
+// //     // 3->64->64->phiPad
+// //     alignas(16) VHid h0 = relu(evalHyperLayer0(lp, t, x));
+// //     alignas(16) VHid h1 = relu(evalHyperLayer1(lp, t, h0));
+// //     alignas(16) VOut y  = evalHyperLayer2(lp, t, h1);
+
+// //     // 必要な 95 次元だけ float に取り出す
+// //     #pragma unroll 1
+// //     for (int i = 0; i < PHI; ++i)
+// //         phi_out[i] = __half2float(y[i]);
+// // }
+
+
+// // static __forceinline__ __device__
+// // void evalHyperMLP_phi95_vec(const LaunchParams& lp, int t,
+// //                             float c0, float c1, float c2,
+// //                             VOut& y_out)   // ← 参照で受ける（コピー回避）
+// // {
+// //     alignas(16) VIn x(half(0.0f));
+// //     x[0] = __float2half(c0);
+// //     x[1] = __float2half(c1);
+// //     x[2] = __float2half(c2);
+
+// //     alignas(16) VHid h0 = relu(evalHyperLayer0(lp, t, x));
+// //     alignas(16) VHid h1 = relu(evalHyperLayer1(lp, t, h0));
+// //     y_out = evalHyperLayer2(lp, t, h1); // VOut(half×96)
+// // }
+
+// static __noinline__ __device__
+// // static __noinline__ __device__
+// void evalHyperMLP_phi62_vec(const LaunchParams& lp, int t,
 //                             float c0, float c1, float c2,
 //                             VOut& y_out)   // ← 参照で受ける（コピー回避）
 // {
@@ -143,24 +159,10 @@ VOut evalHyperLayer2(const LaunchParams& lp, int t, const VHid& in)
 //     y_out = evalHyperLayer2(lp, t, h1); // VOut(half×96)
 // }
 
-static __noinline__ __device__
-// static __noinline__ __device__
-void evalHyperMLP_phi62_vec(const LaunchParams& lp, int t,
-                            float c0, float c1, float c2,
-                            VOut& y_out)   // ← 参照で受ける（コピー回避）
-{
-    alignas(16) VIn x(half(0.0f));
-    x[0] = __float2half(c0);
-    x[1] = __float2half(c1);
-    x[2] = __float2half(c2);
+// static __forceinline__ __device__
+// float phi_f(const VOut& y, int i) { return __half2float(y[i]); }
 
-    alignas(16) VHid h0 = relu(evalHyperLayer0(lp, t, x));
-    alignas(16) VHid h1 = relu(evalHyperLayer1(lp, t, h0));
-    y_out = evalHyperLayer2(lp, t, h1); // VOut(half×96)
-}
-
-static __forceinline__ __device__
-float phi_f(const VOut& y, int i) { return __half2float(y[i]); }
+#include "nsf_simd_constant_backend.cuh"
 
 // zuko: searchsorted(seq, x) = sum(seq < x)
 static __forceinline__ __device__ int searchsorted_strict_lt(const float* seq, int n, float x) {

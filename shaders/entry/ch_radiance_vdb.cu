@@ -408,8 +408,8 @@ extern "C" __global__ void __closesthit__vdb_radiance_spectral()
             //     profile_build_phi_cache(optixLaunchParams, uDiameterNormalized, uHeroNormalized, gHero, nfCache);
             //     nfCacheBuilt = true;
             // }
-            pdfPhase = fmaxf(evalPhaseFunctionNF_phiCached(nfCache, cosTheta), 1e-20f);
-            // pdfPhase = fmaxf(evalPhaseFunctionNF_rqsCached(nfCache, cosTheta), 1e-20f);
+            // pdfPhase = fmaxf(evalPhaseFunctionNF_phiCached(nfCache, cosTheta), 1e-20f);
+            pdfPhase = fmaxf(evalPhaseFunctionNF_rqsCached(nfCache, cosTheta), 1e-20f);
 #endif
 
             // const float phaseValue  = phasePdf;
